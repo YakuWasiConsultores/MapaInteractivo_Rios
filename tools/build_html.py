@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Build the static Leaflet HTML map."""
+"""Build the static A0 Leaflet map in the standard Yacu Warmi poster format.
+
+The layout mirrors the institutional A0 landscape poster used in the other
+corridor maps: left column with location insets, symbology, institutional box,
+scale bar and logos; right column with the title banner, the interactive map
+(UTM grid) and a data table at the bottom. This map is themed on rivers and
+streams (hidrografia).
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 
@@ -28,1254 +36,473 @@ def load_json(path: Path) -> object:
 
 def js_data_var(data_dir: Path) -> str:
     data = {name: load_json(data_dir / filename) for name, filename in DATASETS.items()}
-    return json.dumps(data, ensure_ascii=False)
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
-def html_template(data_json: str) -> str:
-    return f"""<!doctype html>
+def community_rows(data_dir: Path) -> list[tuple[int, str, float]]:
+    collection = load_json(data_dir / "communities.geojson")
+    features = collection["features"]
+    rows = []
+    for feature in features:
+        props = feature["properties"]
+        num_id = props.get("display_id") or props.get("NUM_ID") or 0
+        name = props.get("display_name") or props.get("NAME FINAL") or ""
+        ha = props.get("area_ha") or props.get("Ha") or 0
+        rows.append((int(num_id), str(name), float(ha)))
+    rows.sort(key=lambda item: item[0])
+    return rows
+
+
+def build_tables_html(rows: list[tuple[int, str, float]]) -> str:
+    half = math.ceil(len(rows) / 2)
+    columns = [rows[:half], rows[half:]]
+    parts = []
+    for column in columns:
+        body = "".join(
+            f"<tr><td>{num_id}</td><td>{name}</td>"
+            f"<td style='text-align:right'>{ha:,.2f}</td></tr>"
+            for num_id, name, ha in column
+        )
+        parts.append(
+            "<div class='table-col'><table class='data-table'>"
+            "<tr><th>ID</th><th>COMUNIDAD</th><th>ha</th></tr>"
+            f"{body}</table></div>"
+        )
+    return "".join(parts)
+
+
+def html_template(data_json: str, tables_html: str) -> str:
+    return (
+        TEMPLATE.replace("__TABLES__", tables_html).replace("__DATA_JSON__", data_json)
+    )
+
+
+TEMPLATE = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ríos y Quebradas — Corredor de Conectividad Comunitaria</title>
-  <meta name="description" content="Mapa interactivo de ríos y quebradas del corredor de conectividad comunitaria Colonso-Sumaco-Galeras, provincia de Napo, Ecuador.">
-  <link rel="stylesheet" href="../assets/vendor/leaflet.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    /* ═══════════════════════════════════════════
-       DESIGN TOKENS — Amazonian River Theme
-       ═══════════════════════════════════════════ */
-    :root {{
-      --font-display: 'DM Serif Display', Georgia, serif;
-      --font-body: 'Outfit', system-ui, sans-serif;
-
-      /* Dark sidebar palette */
-      --sidebar-bg: #0b1a12;
-      --sidebar-surface: rgba(18, 42, 28, .55);
-      --sidebar-glass: rgba(255, 255, 255, .04);
-      --sidebar-border: rgba(255, 255, 255, .08);
-      --sidebar-text: #d4e3da;
-      --sidebar-muted: #7a9b88;
-      --sidebar-accent: #38d98a;
-      --sidebar-accent-dim: rgba(56, 217, 138, .12);
-
-      /* Water hierarchy */
-      --river: #1b8ccc;
-      --river-glow: rgba(27, 140, 204, .35);
-      --stream: #45b8de;
-      --canal: #2da0c2;
-      --drain: #83c8de;
-      --unnamed: rgba(69, 184, 222, .55);
-
-      /* Land layers */
-      --community-fill: #b85a2f;
-      --community-stroke: #7a3518;
-      --possible-fill: #d9a0c4;
-      --possible-stroke: #8c5b7d;
-      --snap-fill: #bfc99e;
-      --snap-stroke: #7c8b62;
-      --snap-highlight: #e58b1f;
-      --kba-stroke: #e58b1f;
-      --kba-fill: rgba(242, 223, 143, .18);
-      --ecu25-fill: #246b16;
-      --ecu25-stroke: #1a4f10;
-      --corridor-stroke: #c42d72;
-      --napo-stroke: #1c1f1d;
-    }}
-
-    /* ═══════════════════════════════════════════
-       RESET & BASE
-       ═══════════════════════════════════════════ */
-    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-
-    html {{ font-size: 15px; -webkit-font-smoothing: antialiased; }}
-
-    body {{
-      font-family: var(--font-body);
-      background: #0d1f14;
-      color: var(--sidebar-text);
-      overflow: hidden;
-    }}
-
-    /* ═══════════════════════════════════════════
-       APP LAYOUT
-       ═══════════════════════════════════════════ */
-    .app {{
-      height: 100vh;
-      display: grid;
-      grid-template-columns: 400px 1fr;
-    }}
-
-    /* ═══════════════════════════════════════════
-       SIDEBAR
-       ═══════════════════════════════════════════ */
-    .sidebar {{
-      background: var(--sidebar-bg);
-      background-image:
-        radial-gradient(ellipse at 20% 0%, rgba(56, 217, 138, .06) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 100%, rgba(27, 140, 204, .05) 0%, transparent 50%);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      border-right: 1px solid var(--sidebar-border);
-      position: relative;
-    }}
-
-    /* Decorative top gradient bar */
-    .sidebar::before {{
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, var(--river), var(--sidebar-accent), var(--stream));
-      z-index: 5;
-    }}
-
-    .sidebar-scroll {{
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 28px 24px 20px;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(56, 217, 138, .2) transparent;
-    }}
-
-    .sidebar-scroll::-webkit-scrollbar {{ width: 5px; }}
-    .sidebar-scroll::-webkit-scrollbar-track {{ background: transparent; }}
-    .sidebar-scroll::-webkit-scrollbar-thumb {{
-      background: rgba(56, 217, 138, .25);
-      border-radius: 10px;
-    }}
-
-    /* ── Header ── */
-    .header-badge {{
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: .7rem;
-      font-weight: 600;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--sidebar-accent);
-      background: var(--sidebar-accent-dim);
-      padding: 5px 12px;
-      border-radius: 100px;
-      margin-bottom: 14px;
-    }}
-
-    .header-badge svg {{ width: 14px; height: 14px; }}
-
-    h1 {{
-      font-family: var(--font-display);
-      font-size: 1.75rem;
-      line-height: 1.15;
-      color: #fff;
-      margin-bottom: 10px;
-      font-weight: 400;
-    }}
-
-    h1 span {{
-      background: linear-gradient(135deg, var(--stream) 0%, var(--sidebar-accent) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }}
-
-    .subtitle {{
-      font-size: .82rem;
-      line-height: 1.55;
-      color: var(--sidebar-muted);
-      margin-bottom: 22px;
-      font-weight: 300;
-    }}
-
-    /* ── Stat cards ── */
-    .stats {{
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 24px;
-    }}
-
-    .stat {{
-      background: var(--sidebar-glass);
-      border: 1px solid var(--sidebar-border);
-      border-radius: 12px;
-      padding: 14px 16px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      transition: border-color .3s, background .3s;
-    }}
-
-    .stat:hover {{
-      border-color: rgba(56, 217, 138, .25);
-      background: rgba(255, 255, 255, .06);
-    }}
-
-    .stat-value {{
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: #fff;
-      line-height: 1;
-      margin-bottom: 4px;
-    }}
-
-    .stat-value.water-val {{ color: var(--stream); }}
-    .stat-value.comm-val {{ color: var(--sidebar-accent); }}
-
-    .stat-label {{
-      font-size: .68rem;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--sidebar-muted);
-      font-weight: 500;
-    }}
-
-    /* ── Section titles ── */
-    .section-title {{
-      font-size: .7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--sidebar-muted);
-      margin: 20px 0 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }}
-
-    .section-title::after {{
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--sidebar-border);
-    }}
-
-    /* ── Search ── */
-    .search-box {{
-      position: relative;
-      margin-bottom: 16px;
-    }}
-
-    .search-box input {{
-      width: 100%;
-      padding: 10px 14px 10px 38px;
-      background: var(--sidebar-glass);
-      border: 1px solid var(--sidebar-border);
-      border-radius: 10px;
-      color: #fff;
-      font-family: var(--font-body);
-      font-size: .85rem;
-      outline: none;
-      transition: border-color .25s, box-shadow .25s;
-    }}
-
-    .search-box input::placeholder {{ color: var(--sidebar-muted); opacity: .7; }}
-
-    .search-box input:focus {{
-      border-color: var(--sidebar-accent);
-      box-shadow: 0 0 0 3px var(--sidebar-accent-dim);
-    }}
-
-    .search-box svg {{
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 16px; height: 16px;
-      color: var(--sidebar-muted);
-      pointer-events: none;
-    }}
-
-    /* ── Legend ── */
-    .legend {{ display: flex; flex-direction: column; gap: 3px; }}
-
-    .legend-item {{
-      display: grid;
-      grid-template-columns: 20px 36px 1fr;
-      align-items: center;
-      gap: 10px;
-      padding: 7px 10px;
-      border-radius: 8px;
-      cursor: pointer;
-      user-select: none;
-      transition: background .2s, opacity .3s;
-      font-size: .82rem;
-    }}
-
-    .legend-item:hover {{ background: rgba(255,255,255,.04); }}
-    .legend-item.off {{ opacity: .3; }}
-    .legend-item.off .leg-check {{ background: transparent; border-color: rgba(255,255,255,.15); }}
-
-    .leg-check {{
-      width: 18px; height: 18px;
-      border: 1.5px solid var(--sidebar-accent);
-      border-radius: 5px;
-      display: grid;
-      place-items: center;
-      font-size: 11px;
-      background: var(--sidebar-accent-dim);
-      color: var(--sidebar-accent);
-      transition: all .2s;
-      flex-shrink: 0;
-    }}
-
-    .leg-swatch {{
-      height: 14px;
-      border-radius: 3px;
-      border: 1px solid rgba(255,255,255,.12);
-    }}
-
-    /* River swatches — line style */
-    .leg-swatch.sw-river {{
-      height: 5px;
-      border: 0;
-      background: var(--river);
-      border-radius: 10px;
-      box-shadow: 0 0 8px var(--river-glow);
-      position: relative;
-    }}
-
-    .leg-swatch.sw-stream {{
-      height: 3px;
-      border: 0;
-      background: var(--stream);
-      border-radius: 10px;
-      opacity: .85;
-    }}
-
-    .leg-swatch.sw-canal {{
-      height: 3px;
-      border: 0;
-      background: repeating-linear-gradient(90deg, var(--canal) 0px, var(--canal) 6px, transparent 6px, transparent 10px);
-      border-radius: 10px;
-    }}
-
-    .leg-swatch.sw-drain {{
-      height: 2px;
-      border: 0;
-      background: repeating-linear-gradient(90deg, var(--drain) 0px, var(--drain) 3px, transparent 3px, transparent 6px);
-      border-radius: 10px;
-    }}
-
-    .leg-swatch.sw-community {{ background: var(--community-fill); }}
-    .leg-swatch.sw-possible {{ background: var(--possible-fill); opacity: .75; }}
-    .leg-swatch.sw-snap {{ background: var(--snap-fill); }}
-    .leg-swatch.sw-kba {{
-      background: repeating-linear-gradient(90deg,
-        rgba(229,139,31,.15) 0px, rgba(229,139,31,.15) 5px,
-        var(--kba-stroke) 5px, var(--kba-stroke) 7px
-      );
-    }}
-    .leg-swatch.sw-ecu25 {{ background: var(--ecu25-fill); }}
-    .leg-swatch.sw-corridor {{
-      height: 3px;
-      border: 0;
-      background: repeating-linear-gradient(90deg, var(--corridor-stroke) 0px, var(--corridor-stroke) 8px, transparent 8px, transparent 14px);
-      border-radius: 10px;
-    }}
-    .leg-swatch.sw-napo {{
-      background: transparent;
-      border: 2px solid var(--napo-stroke);
-    }}
-
-    .leg-label {{ color: var(--sidebar-text); }}
-    .leg-sublabel {{ font-size: .72rem; color: var(--sidebar-muted); }}
-
-    /* ── Water type detail accordion ── */
-    .water-types {{
-      margin: 0 0 4px 30px;
-      padding-left: 10px;
-      border-left: 2px solid rgba(27, 140, 204, .2);
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      overflow: hidden;
-      transition: max-height .4s ease, opacity .3s;
-    }}
-
-    .water-type-row {{
-      display: grid;
-      grid-template-columns: 36px 1fr auto;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      border-radius: 6px;
-      font-size: .78rem;
-      color: var(--sidebar-muted);
-      cursor: pointer;
-      transition: background .2s;
-    }}
-
-    .water-type-row:hover {{ background: rgba(255,255,255,.03); color: var(--sidebar-text); }}
-
-    .water-type-count {{
-      font-size: .68rem;
-      background: var(--sidebar-glass);
-      padding: 2px 7px;
-      border-radius: 100px;
-      color: var(--sidebar-muted);
-      font-weight: 500;
-    }}
-
-    /* ── Community table ── */
-    .table-container {{
-      border: 1px solid var(--sidebar-border);
-      border-radius: 12px;
-      overflow: hidden;
-      background: var(--sidebar-glass);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-    }}
-
-    .table-container table {{
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .78rem;
-    }}
-
-    .table-container thead th {{
-      background: rgba(0,0,0,.35);
-      padding: 9px 10px;
-      font-size: .67rem;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--sidebar-muted);
-      font-weight: 600;
-      text-align: left;
-      border-bottom: 1px solid var(--sidebar-border);
-      position: sticky;
-      top: 0;
-      z-index: 2;
-    }}
-
-    .table-container tbody td {{
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(255,255,255,.04);
-      color: var(--sidebar-text);
-      font-weight: 300;
-    }}
-
-    .table-container tbody tr {{
-      cursor: pointer;
-      transition: background .2s;
-    }}
-
-    .table-container tbody tr:hover {{
-      background: rgba(56, 217, 138, .08);
-    }}
-
-    .table-container tbody tr:last-child td {{ border-bottom: 0; }}
-
-    .table-container .td-id {{
-      font-weight: 600;
-      color: var(--sidebar-accent);
-      width: 32px;
-      text-align: center;
-    }}
-
-    .table-container .td-ha {{
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-      color: var(--sidebar-muted);
-      white-space: nowrap;
-    }}
-
-    .table-scroll {{
-      max-height: 280px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(56, 217, 138, .15) transparent;
-    }}
-
-    .table-scroll::-webkit-scrollbar {{ width: 4px; }}
-    .table-scroll::-webkit-scrollbar-thumb {{
-      background: rgba(56, 217, 138, .2);
-      border-radius: 10px;
-    }}
-
-    /* ── Footer ── */
-    .sidebar-footer {{
-      padding: 16px 24px;
-      border-top: 1px solid var(--sidebar-border);
-      background: rgba(0,0,0,.2);
-    }}
-
-    .footer-note {{
-      font-size: .7rem;
-      line-height: 1.5;
-      color: var(--sidebar-muted);
-      margin-bottom: 12px;
-      font-weight: 300;
-    }}
-
-    .footer-logos {{
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      align-items: center;
-    }}
-
-    .footer-logos img {{
-      width: 100%;
-      max-height: 48px;
-      object-fit: contain;
-      filter: brightness(0) invert(.75);
-      opacity: .6;
-      transition: opacity .3s, filter .3s;
-    }}
-
-    .footer-logos img:hover {{
-      opacity: 1;
-      filter: brightness(0) invert(1);
-    }}
-
-    /* ═══════════════════════════════════════════
-       MAP AREA
-       ═══════════════════════════════════════════ */
-    .map-area {{
-      position: relative;
-      min-width: 0;
-    }}
-
-    #map {{
-      width: 100%;
-      height: 100vh;
-    }}
-
-    /* Override Leaflet controls */
-    .leaflet-control-layers {{
-      background: var(--sidebar-bg) !important;
-      border: 1px solid var(--sidebar-border) !important;
-      border-radius: 10px !important;
-      color: var(--sidebar-text) !important;
-      font-family: var(--font-body) !important;
-      font-size: .78rem !important;
-      box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
-      padding: 10px 14px !important;
-      backdrop-filter: blur(12px) !important;
-      -webkit-backdrop-filter: blur(12px) !important;
-    }}
-
-    .leaflet-control-layers label {{ color: var(--sidebar-text) !important; }}
-
-    .leaflet-control-layers-separator {{
-      border-top-color: var(--sidebar-border) !important;
-    }}
-
-    .leaflet-control-zoom a {{
-      background: var(--sidebar-bg) !important;
-      color: var(--sidebar-text) !important;
-      border-color: var(--sidebar-border) !important;
-      font-family: var(--font-body) !important;
-    }}
-
-    .leaflet-control-zoom a:hover {{
-      background: rgba(56, 217, 138, .15) !important;
-      color: #fff !important;
-    }}
-
-    /* ── Map title overlay ── */
-    .map-title {{
-      position: absolute;
-      top: 14px;
-      left: 60px;
-      z-index: 800;
-      background: var(--sidebar-bg);
-      border: 1px solid var(--sidebar-border);
-      border-radius: 12px;
-      padding: 10px 20px;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 8px 32px rgba(0,0,0,.4);
-      pointer-events: none;
-    }}
-
-    .map-title h2 {{
-      font-family: var(--font-display);
-      font-size: 1rem;
-      color: #fff;
-      font-weight: 400;
-      margin: 0;
-    }}
-
-    .map-title small {{
-      font-family: var(--font-body);
-      font-size: .68rem;
-      color: var(--sidebar-muted);
-      font-weight: 300;
-    }}
-
-    /* ── Community markers ── */
-    .comm-marker span {{
-      display: grid;
-      place-items: center;
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      background: rgba(184, 90, 47, .88);
-      color: #fff;
-      border: 2px solid rgba(255, 255, 255, .5);
-      font: 700 12px/1 var(--font-body);
-      box-shadow: 0 2px 10px rgba(0,0,0,.4), 0 0 0 3px rgba(184, 90, 47, .25);
-      transition: transform .2s, box-shadow .2s;
-    }}
-
-    .comm-marker:hover span {{
-      transform: scale(1.15);
-      box-shadow: 0 4px 16px rgba(0,0,0,.5), 0 0 0 4px rgba(184, 90, 47, .4);
-    }}
-
-    /* ── Popups ── */
-    .leaflet-popup-content-wrapper {{
-      background: var(--sidebar-bg) !important;
-      border: 1px solid var(--sidebar-border) !important;
-      border-radius: 12px !important;
-      box-shadow: 0 12px 40px rgba(0,0,0,.6) !important;
-      color: var(--sidebar-text) !important;
-    }}
-
-    .leaflet-popup-tip {{ background: var(--sidebar-bg) !important; }}
-
-    .leaflet-popup-close-button {{
-      color: var(--sidebar-muted) !important;
-      font-size: 18px !important;
-    }}
-
-    .leaflet-popup-content {{
-      margin: 14px 16px !important;
-      font-family: var(--font-body) !important;
-      font-size: .82rem !important;
-      line-height: 1.5 !important;
-      min-width: 240px !important;
-    }}
-
-    .popup-header {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--sidebar-border);
-    }}
-
-    .popup-icon {{
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      display: grid;
-      place-items: center;
-      flex-shrink: 0;
-      font-size: 16px;
-    }}
-
-    .popup-icon.water-icon {{
-      background: linear-gradient(135deg, rgba(27,140,204,.25), rgba(69,184,222,.15));
-      color: var(--stream);
-    }}
-
-    .popup-icon.comm-icon {{
-      background: linear-gradient(135deg, rgba(184,90,47,.3), rgba(184,90,47,.15));
-      color: #e8a07a;
-    }}
-
-    .popup-icon.area-icon {{
-      background: linear-gradient(135deg, rgba(56,217,138,.2), rgba(56,217,138,.1));
-      color: var(--sidebar-accent);
-    }}
-
-    .popup-title {{
-      font-family: var(--font-display);
-      font-size: .95rem;
-      color: #fff;
-      font-weight: 400;
-    }}
-
-    .popup-meta {{
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }}
-
-    .popup-row {{
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: .78rem;
-    }}
-
-    .popup-row-key {{ color: var(--sidebar-muted); }}
-    .popup-row-val {{ color: var(--sidebar-text); font-weight: 500; }}
-
-    .popup-type-badge {{
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 10px;
-      border-radius: 100px;
-      font-size: .7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-    }}
-
-    .popup-type-badge.river {{ background: rgba(27,140,204,.2); color: var(--river); }}
-    .popup-type-badge.stream {{ background: rgba(69,184,222,.15); color: var(--stream); }}
-    .popup-type-badge.canal {{ background: rgba(45,160,194,.15); color: var(--canal); }}
-    .popup-type-badge.drain {{ background: rgba(131,200,222,.12); color: var(--drain); }}
-
-    /* ═══════════════════════════════════════════
-       RESPONSIVE
-       ═══════════════════════════════════════════ */
-    @media (max-width: 900px) {{
-      .app {{
-        grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto;
-      }}
-      .sidebar {{ order: 2; max-height: 45vh; }}
-      .map-area {{ order: 1; height: 55vh; }}
-      #map {{ height: 55vh; }}
-      .map-title {{ left: 10px; }}
-    }}
-
-    /* ═══════════════════════════════════════════
-       ANIMATIONS
-       ═══════════════════════════════════════════ */
-    @keyframes fadeSlideIn {{
-      from {{ opacity: 0; transform: translateY(10px); }}
-      to {{ opacity: 1; transform: translateY(0); }}
-    }}
-
-    .sidebar-scroll > * {{
-      animation: fadeSlideIn .5s ease both;
-    }}
-
-    .sidebar-scroll > *:nth-child(1) {{ animation-delay: .05s; }}
-    .sidebar-scroll > *:nth-child(2) {{ animation-delay: .1s; }}
-    .sidebar-scroll > *:nth-child(3) {{ animation-delay: .15s; }}
-    .sidebar-scroll > *:nth-child(4) {{ animation-delay: .2s; }}
-    .sidebar-scroll > *:nth-child(5) {{ animation-delay: .25s; }}
-    .sidebar-scroll > *:nth-child(6) {{ animation-delay: .3s; }}
-    .sidebar-scroll > *:nth-child(7) {{ animation-delay: .35s; }}
-    .sidebar-scroll > *:nth-child(8) {{ animation-delay: .4s; }}
-    .sidebar-scroll > *:nth-child(9) {{ animation-delay: .45s; }}
-    .sidebar-scroll > *:nth-child(10) {{ animation-delay: .5s; }}
-    .sidebar-scroll > *:nth-child(11) {{ animation-delay: .55s; }}
-    .sidebar-scroll > *:nth-child(12) {{ animation-delay: .6s; }}
-  </style>
+    <meta charset="UTF-8">
+    <title>Rios y Quebradas - Corredor de Conectividad Comunitaria</title>
+    <link rel="stylesheet" href="assets/vendor/leaflet.css" />
+    <style>
+        :root {
+            --water-river: #0e6db4;
+            --water-stream: #4ba3d8;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f0f0;
+            width: 1189mm;
+            height: 841mm;
+            box-sizing: border-box;
+        }
+        .page-container {
+            background: #fff;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            padding: 20px;
+            box-sizing: border-box;
+            border: 2px solid transparent;
+        }
+        @media print {
+            @page { size: A0 landscape; margin: 0; }
+            body { padding: 0; background: #fff; }
+            .no-print { display: none !important; }
+            .page-container { border: none; padding: 25px; }
+        }
+        .btn-print {
+            position: fixed; top: 20px; right: 20px;
+            background: #0e6db4; color: white; border: none;
+            padding: 15px 30px; font-size: 1.5rem; border-radius: 8px;
+            cursor: pointer; font-weight: bold;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.3); z-index: 9999;
+        }
+
+        /* Layout Grid */
+        .left-col {
+            width: 25%; display: flex; flex-direction: column;
+            gap: 20px; padding-right: 20px;
+        }
+        .right-col {
+            width: 75%; display: flex; flex-direction: column;
+            border: 2px solid #000;
+        }
+
+        /* Left Column Items */
+        .box-title { font-size: 2.5rem; font-weight: bold; text-align: center; margin-bottom: 10px; }
+        .inset-map {
+            border: 2px solid #ccc; height: 350px; width: 100%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .inset-map img { width: 100%; height: 100%; object-fit: cover; }
+
+        .symbology-box { background: #e8e8e8; padding: 35px; flex: 1; }
+        .symbology-title { font-size: 4rem; font-weight: bold; margin-bottom: 30px; text-transform: uppercase; }
+        .symb-group-title {
+            font-size: 2.4rem; font-weight: bold; color: #0e6db4;
+            margin: 10px 0 18px; text-transform: uppercase;
+        }
+        .symbology-item {
+            display: flex; align-items: center; gap: 24px; margin-bottom: 24px;
+            font-size: 2.4rem; cursor: pointer; user-select: none;
+            transition: opacity 0.25s ease; border-radius: 8px; padding: 8px 12px;
+        }
+        .symbology-item:hover { background: rgba(0,0,0,0.07); }
+        .symbology-item.layer-off { opacity: 0.35; }
+        .symbology-item .symb-check {
+            width: 36px; height: 36px; border: 3px solid #555; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; font-size: 2rem; color: #1e8449;
+            transition: all 0.2s ease; background: #fff;
+        }
+        .symbology-item .symb-check.checked { background: #d5f5e3; border-color: #1e8449; }
+        .symb-color { width: 90px; height: 52px; border: 1px solid #000; flex-shrink: 0; }
+        .symb-line { width: 90px; height: 0; flex-shrink: 0; }
+        .symb-line.river { border-top: 9px solid var(--water-river); }
+        .symb-line.stream { border-top: 5px solid var(--water-stream); }
+        @media print {
+            .symbology-item.layer-off { display: none; }
+            .symbology-item .symb-check { display: none; }
+        }
+
+        .yacuwarmi-box { border: 2px solid #000; display: flex; flex-direction: column; }
+        .yacuwarmi-title { font-size: 2rem; font-weight: bold; text-align: center; padding: 10px; border-bottom: 2px solid #000; }
+        .yacuwarmi-grid { display: grid; grid-template-columns: 1fr 1fr; font-size: 1.2rem; }
+        .yg-cell { padding: 10px; border-bottom: 1px solid #000; border-right: 1px solid #000; line-height: 1.3; }
+        .yg-cell:nth-child(even) { border-right: none; }
+        .yg-cell.no-border-bottom { border-bottom: none; }
+
+        .scale-box { text-align: center; padding: 10px 0; font-size: 1.4rem; }
+        .scale-bar { width: 80%; height: 10px; background: linear-gradient(90deg, #000 50%, #fff 50%); border: 2px solid #000; margin: 10px auto; position: relative; }
+        .scale-text { display: flex; justify-content: space-between; width: 80%; margin: 0 auto; font-size: 1.4rem; font-weight: bold; }
+
+        .logos { display: flex; justify-content: space-between; align-items: center; border: 1px solid #ccc; padding: 15px; gap: 15px; }
+        .logos img { max-width: 32%; height: 150px; object-fit: contain; }
+
+        /* Right Column Items */
+        .map-wrapper { flex: 4; min-height: 800px; position: relative; background: #fafafa; }
+        #map { width: 100%; height: 100%; background: #eaf4fb; }
+        .map-title-banner {
+            position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+            background: #fff; padding: 20px 40px; font-size: 2.6rem; font-weight: bold;
+            text-align: center; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            white-space: normal; width: 90%; border: 2px solid #000;
+        }
+
+        .kba-pattern {
+            background: repeating-linear-gradient(45deg, #e67e22, #e67e22 5px, transparent 5px, transparent 10px);
+        }
+
+        /* Data Tables at Bottom Right */
+        .tables-wrapper { flex: 1; display: flex; border-top: 2px solid #000; background: #fff; padding: 10px; gap: 15px; overflow: hidden; }
+        .table-col { flex: 1; overflow: hidden; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 1.25rem; }
+        .data-table th, .data-table td { border: 2px solid #000; padding: 5px; text-align: left; }
+        .data-table th { font-weight: bold; background: #e8e8e8; }
+
+        /* Map labels */
+        .comm-label-icon { display: flex; align-items: center; justify-content: center; }
+        .comm-label {
+            background: #fff; border: 3px solid #b7410e; color: #b7410e; border-radius: 50%;
+            width: 45px; height: 45px; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 24px; box-shadow: 2px 2px 5px rgba(0,0,0,0.6);
+        }
+        .park-label { color: #111; font-size: 25px; font-weight: bold; text-align: center; text-shadow: 2px 2px 5px #fff, -2px -2px 5px #fff; }
+        .snap-label { color: #111; font-size: 20px; font-weight: bold; text-align: center; text-shadow: 1px 1px 3px #fff, -1px -1px 3px #fff; white-space: nowrap; }
+        .river-label {
+            color: #0a4f87; font-size: 19px; font-style: italic; font-weight: bold;
+            white-space: nowrap; text-shadow: 1px 1px 3px #fff, -1px -1px 3px #fff, 1px -1px 3px #fff, -1px 1px 3px #fff;
+            background: transparent; border: none;
+        }
+        .label-inner-top { position: absolute; top: 3px; left: 0; transform: translateX(-50%); color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
+        .label-inner-bottom { position: absolute; bottom: 3px; left: 0; transform: translateX(-50%); color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
+        .label-inner-left { position: absolute; top: 0; left: 3px; transform: translateY(-50%) rotate(-90deg); transform-origin: left center; color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
+        .label-inner-right { position: absolute; top: 0; right: 3px; transform: translateY(-50%) rotate(90deg); transform-origin: right center; color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
+    </style>
 </head>
-<body>
-  <div class="app">
-    <!-- ════════════════ SIDEBAR ════════════════ -->
-    <aside class="sidebar">
-      <div class="sidebar-scroll">
-        <!-- Badge -->
-        <div class="header-badge">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6 2 10.5c0 3 2.5 6 5 8.5l5 3 5-3c2.5-2.5 5-5.5 5-8.5C22 6 17.52 2 12 2z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
-          Corredor Colonso-Sumaco-Galeras
+"""
+
+
+TEMPLATE += r"""<body>
+    <svg width="0" height="0" style="position:absolute; z-index:-1;"><defs>
+        <pattern id="hatch-kba" width="16" height="16" patternTransform="rotate(0)" patternUnits="userSpaceOnUse">
+            <line x1="8" y1="0" x2="8" y2="16" style="stroke:#e67e22; stroke-width:3" />
+        </pattern>
+    </defs></svg>
+
+    <button class="btn-print no-print" onclick="window.print()">Imprimir PDF (A0)</button>
+
+    <div class="page-container">
+        <!-- COLUMNA IZQUIERDA -->
+        <div class="left-col">
+            <div>
+                <div class="box-title">Ubicacion en Ecuador</div>
+                <div class="inset-map"><img src="inset_ecuador.png" alt="Ecuador"></div>
+            </div>
+            <div>
+                <div class="box-title">Ubicacion provincial</div>
+                <div class="inset-map"><img src="inset_napo.png" alt="Napo"></div>
+            </div>
+
+            <div class="symbology-box" id="symbology-box">
+                <div class="symbology-title">SIMBOLOGIA</div>
+
+                <div class="symb-group-title">Hidrografia</div>
+                <div class="symbology-item" data-layer="rivers" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-line river"></div> Rios principales</div>
+                <div class="symbology-item" data-layer="streams" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-line stream"></div> Quebradas y esteros</div>
+
+                <div class="symb-group-title">Territorios</div>
+                <div class="symbology-item" data-layer="communities" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #a0522d;"></div> Comunidades del corredor</div>
+                <div class="symbology-item" data-layer="posibles" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #f5b7b1; border-color: transparent;"></div> Posibles comunidades a integrar</div>
+                <div class="symbology-item" data-layer="kba" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color kba-pattern" style="border-color: #e67e22;"></div> KBA Sumaco-Napo Galeras</div>
+                <div class="symbology-item" data-layer="ecu25" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #1e8449;"></div> KBA Huacamayos-San Isidro</div>
+                <div class="symbology-item" data-layer="corredorNor" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: transparent; border: 3px dashed #0057b8;"></div> Corredor NorOriental</div>
+                <div class="symbology-item" data-layer="napo" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #fff; border: 1px solid #000;"></div> Napo</div>
+                <div class="symbology-item" data-layer="snap" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #a9dfbf;"></div> SNAP</div>
+            </div>
+
+            <div class="yacuwarmi-box">
+                <div class="yacuwarmi-title">FUNDACION AMAZONICA YACUWARMI</div>
+                <div class="yacuwarmi-grid">
+                    <div class="yg-cell">Contiene:<br>Red hidrica (rios y quebradas) del corredor de conectividad comunitaria, herencia ancestral y bioeconomia.</div>
+                    <div class="yg-cell" style="text-align: center;"><br>SISTEMA DE COORDENADAS<br><br>PROYECCION UNIVERSAL TRANSVERSA DE MERCATOR<br>ELIPSOIDE, DATUM: WGS84, ZONA 17 SUR</div>
+                    <div class="yg-cell">Fuente:<br>Cartografia base esc: 1:100 000 IGM. MAATE (2024). Hidrografia: OpenStreetMap (provisional).</div>
+                    <div class="yg-cell" style="text-align: center;">Fecha:<br>27 / 06 / 2026<br><br>Elaborado por: Ing Tanya Camalle Analista SIG<br>Ing Kevin Castro</div>
+                </div>
+            </div>
+
+            <div class="scale-box">
+                <div>Escala de trabajo:<br>1:100000</div>
+                <div class="scale-text"><span>0</span><span>15</span><span>30 km</span></div>
+                <div class="scale-bar"></div>
+            </div>
+
+            <div class="logos">
+                <img src="assets/images/LOGO_YACU_WARMI_1.png" alt="Yacuwarmi Logo">
+                <img src="assets/images/cepf-logo-large-png.png" alt="Critical Ecosystem Partnership Fund">
+                <img src="assets/images/Logo FFLA-colores.png" alt="Futuro Latinoamericano">
+            </div>
         </div>
 
-        <!-- Title -->
-        <h1>Ríos y <span>Quebradas</span> del Corredor</h1>
-
-        <p class="subtitle">Mapa interactivo de la red hídrica del corredor de conectividad comunitaria, herencia ancestral y bioeconomía. Provincia de Napo, Ecuador.</p>
-
-        <!-- Stats -->
-        <div class="stats">
-          <div class="stat">
-            <div class="stat-value water-val" id="stat-waterways">0</div>
-            <div class="stat-label">Tramos de agua</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value water-val" id="stat-rivers">0</div>
-            <div class="stat-label">Ríos con nombre</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value comm-val" id="stat-communities">0</div>
-            <div class="stat-label">Comunidades</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value comm-val" id="stat-area">0</div>
-            <div class="stat-label">ha totales</div>
-          </div>
+        <!-- COLUMNA DERECHA -->
+        <div class="right-col">
+            <div class="map-wrapper">
+                <div class="map-title-banner">RED HIDRICA DEL CORREDOR DE CONECTIVIDAD COMUNITARIA, HERENCIA ANCESTRAL Y BIOECONOMIA COLONSO-SUMACO-GALERAS</div>
+                <div id="map"></div>
+            </div>
+            <div class="tables-wrapper">__TABLES__</div>
         </div>
-
-        <!-- Search -->
-        <div class="search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <input type="text" id="search-input" placeholder="Buscar río, quebrada o comunidad…" autocomplete="off">
-        </div>
-
-        <!-- Legend: Waterways -->
-        <div class="section-title">Hidrografía</div>
-        <div class="legend" id="legend-water">
-          <div class="legend-item" data-layer="rivers" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-river"></div>
-            <div><div class="leg-label">Ríos principales</div><div class="leg-sublabel" id="count-river">0 tramos</div></div>
-          </div>
-          <div class="legend-item" data-layer="streams" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-stream"></div>
-            <div><div class="leg-label">Quebradas y esteros</div><div class="leg-sublabel" id="count-stream">0 tramos</div></div>
-          </div>
-          <div class="legend-item" data-layer="canals" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-canal"></div>
-            <div><div class="leg-label">Canales</div><div class="leg-sublabel" id="count-canal">0 tramos</div></div>
-          </div>
-          <div class="legend-item" data-layer="drains" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-drain"></div>
-            <div><div class="leg-label">Drenajes y acequias</div><div class="leg-sublabel" id="count-drain">0 tramos</div></div>
-          </div>
-        </div>
-
-        <!-- Legend: Territories -->
-        <div class="section-title">Territorios</div>
-        <div class="legend" id="legend-land">
-          <div class="legend-item" data-layer="communities" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-community"></div>
-            <div class="leg-label">Comunidades del corredor</div>
-          </div>
-          <div class="legend-item" data-layer="possible" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-possible"></div>
-            <div class="leg-label">Posibles comunidades</div>
-          </div>
-          <div class="legend-item" data-layer="kba" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-kba"></div>
-            <div class="leg-label">KBA Sumaco-Napo Galeras</div>
-          </div>
-          <div class="legend-item" data-layer="ecu25" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-ecu25"></div>
-            <div class="leg-label">KBA Huacamayos-San Isidro</div>
-          </div>
-          <div class="legend-item" data-layer="snap" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-snap"></div>
-            <div class="leg-label">SNAP</div>
-          </div>
-          <div class="legend-item" data-layer="corridor" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-corridor"></div>
-            <div class="leg-label">Corredor NorOriental</div>
-          </div>
-          <div class="legend-item" data-layer="napo" onclick="toggleLegend(this)">
-            <div class="leg-check">✓</div>
-            <div class="leg-swatch sw-napo"></div>
-            <div class="leg-label">Provincia Napo</div>
-          </div>
-        </div>
-
-        <!-- Communities table -->
-        <div class="section-title">Comunidades</div>
-        <div class="table-container">
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>ID</th><th>Nombre</th><th style="text-align:right">ha</th></tr></thead>
-              <tbody id="communities-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="sidebar-footer">
-        <p class="footer-note">Fuente cartográfica: base GIS Yacu Warmi, Corredor de conectividad v8. Hidrografía: OpenStreetMap contributors vía Overpass API. Cartografía base esc. 1:100 000 IGM. MAATE (2024). Elaborado por: Ing. Tanya Camalle — Analista SIG · Ing. Kevin Castro.</p>
-        <div class="footer-logos">
-          <img src="../assets/images/LOGO_YACU_WARMI_1.png" alt="Fundación Amazónica Yacu Warmi">
-          <img src="../assets/images/cepf-logo-large-png.png" alt="Critical Ecosystem Partnership Fund">
-          <img src="../assets/images/Logo FFLA-colores.png" alt="Futuro Latinoamericano">
-        </div>
-      </div>
-    </aside>
-
-    <!-- ════════════════ MAP ════════════════ -->
-    <div class="map-area">
-      <div class="map-title">
-        <h2>Corredor de Conectividad Comunitaria</h2>
-        <small>Herencia Ancestral y Bioeconomía · Colonso-Sumaco-Galeras</small>
-      </div>
-      <div id="map" aria-label="Mapa interactivo de ríos y quebradas"></div>
     </div>
-  </div>
+"""
 
-  <script src="../assets/vendor/leaflet.js"></script>
-  <script>
-    /* ═══════════════════════════════════════════
-       DATA
-       ═══════════════════════════════════════════ */
-    const DATA = {data_json};
-    const fmt = new Intl.NumberFormat('es-EC', {{ maximumFractionDigits: 2 }});
 
-    /* ═══════════════════════════════════════════
-       MAP INIT
-       ═══════════════════════════════════════════ */
-    const map = L.map('map', {{
-      zoomControl: true,
-      preferCanvas: true,
-      zoomSnap: 0.25
-    }});
+TEMPLATE += r"""
+    <script src="assets/vendor/leaflet.js"></script>
+    <script src="assets/vendor/proj4.js"></script>
+    <script>
+        const DATA = __DATA_JSON__;
 
-    /* ── Base layers ── */
-    const osmBase = L.tileLayer('https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }}).addTo(map);
+        // Normalize river names (fix mixed-case encoding like "RIo" / "Rio")
+        function normName(n) {
+            if (!n) return '';
+            return n.replace(/^R[ÍI]o\b/i, 'Río').replace(/\s+/g, ' ').trim();
+        }
+        function isNamed(p) {
+            return p.name && p.name !== 'Sin nombre' && p.name !== p.waterway;
+        }
 
-    const satellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={{x}}&y={{y}}&z={{z}}', {{
-      maxZoom: 20,
-      attribution: 'Google Satellite'
-    }});
+        const map = L.map('map', { zoomControl: true, preferCanvas: true, attributionControl: true });
 
-    const topoMap = L.tileLayer('https://{{s}}.tile.opentopomap.org/{{z}}/{{x}}/{{y}}.png', {{
-      maxZoom: 17,
-      attribution: '&copy; OpenTopoMap'
-    }});
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
 
-    /* ═══════════════════════════════════════════
-       WATER STYLE SYSTEM — Rich differentiation
-       ═══════════════════════════════════════════ */
-    const WATER_LABELS = {{
-      river: 'Río',
-      stream: 'Quebrada',
-      canal: 'Canal',
-      drain: 'Drenaje',
-      ditch: 'Acequia'
-    }};
+        proj4.defs("EPSG:32717", "+proj=utm +zone=17 +south +datum=WGS84 +units=m +no_defs");
 
-    function waterStyle(feature) {{
-      const wt = feature.properties.waterway;
-      const named = feature.properties.name && feature.properties.name !== 'Sin nombre' && feature.properties.name !== wt;
+        // ---- Polygon label helper (protected areas) ----
+        function labelPolygons(feature, layer) {
+            if (!layer.getBounds) return;
+            var props = feature.properties || {};
+            var name = props.nam || props.NatName || props.name || '';
+            if (!name) return;
+            var center = layer.getBounds().getCenter();
+            var mk = L.marker(center, {
+                icon: L.divIcon({ className: 'snap-label', html: name, iconSize: null }),
+                interactive: false
+            });
+            return mk;
+        }
 
-      if (wt === 'river') {{
-        return {{
-          color: '#1b8ccc',
-          weight: named ? 3.8 : 2.6,
-          opacity: .92,
-          lineCap: 'round',
-          lineJoin: 'round'
-        }};
-      }}
-      if (wt === 'stream') {{
-        return {{
-          color: named ? '#45b8de' : '#6dcce6',
-          weight: named ? 2.0 : 1.3,
-          opacity: named ? .85 : .55,
-          lineCap: 'round',
-          lineJoin: 'round'
-        }};
-      }}
-      if (wt === 'canal') {{
-        return {{
-          color: '#2da0c2',
-          weight: 2.4,
-          opacity: .8,
-          dashArray: '10 5',
-          lineCap: 'butt'
-        }};
-      }}
-      // drain / ditch
-      return {{
-        color: '#83c8de',
-        weight: 1.1,
-        opacity: .6,
-        dashArray: '4 4',
-        lineCap: 'butt'
-      }};
-    }}
+        // ---- Base / territorial layers (standard styling) ----
+        var napoLayer = L.geoJSON(DATA.napo, {
+            style: { color: '#000', weight: 1, fillColor: '#ffffff', fillOpacity: 1 }
+        }).addTo(map);
 
-    function waterPopup(feature) {{
-      const p = feature.properties;
-      const wt = p.waterway || 'stream';
-      const name = (p.name && p.name !== 'Sin nombre' && p.name !== wt) ? p.name : 'Curso de agua sin nombre';
-      const label = WATER_LABELS[wt] || wt;
-      return `
-        <div class="popup-header">
-          <div class="popup-icon water-icon">💧</div>
-          <div class="popup-title">${{name}}</div>
-        </div>
-        <div class="popup-meta">
-          <div class="popup-row"><span class="popup-row-key">Tipo</span><span class="popup-type-badge ${{wt}}">${{label}}</span></div>
-          <div class="popup-row"><span class="popup-row-key">Fuente</span><span class="popup-row-val">${{p.source || 'N/D'}}</span></div>
-          <div class="popup-row"><span class="popup-row-key">OSM ID</span><span class="popup-row-val">${{p.osm_id || 'N/D'}}</span></div>
-        </div>`;
-    }}
+        var snapLabels = [];
+        var snapLayer = L.geoJSON(DATA.snap, {
+            style: { color: '#7dcea0', weight: 1, fillColor: '#a9dfbf', fillOpacity: 0.6 },
+            onEachFeature: function(f, l) { var m = labelPolygons(f, l); if (m) snapLabels.push(m); }
+        }).addTo(map);
 
-    /* ═══════════════════════════════════════════
-       LAND LAYER STYLES
-       ═══════════════════════════════════════════ */
-    function communityStyle() {{
-      return {{ color: '#7a3518', weight: 1.5, fillColor: '#b85a2f', fillOpacity: 0.55 }};
-    }}
+        var ecu25Labels = [];
+        var ecu25Layer = L.geoJSON(DATA.kbaHuacamayos, {
+            style: { color: '#145a32', weight: 1, fillColor: '#1e8449', fillOpacity: 0.45 }
+        }).addTo(map);
 
-    function possibleStyle() {{
-      return {{ color: '#8c5b7d', weight: 1.2, fillColor: '#d9a0c4', fillOpacity: 0.45, dashArray: '6 3' }};
-    }}
+        var kbaLayer = L.geoJSON(DATA.kbaSumaco, {
+            style: { color: '#e67e22', weight: 5, fillColor: 'url(#hatch-kba)', fillOpacity: 0.5 }
+        }).addTo(map);
 
-    function snapStyle(feature) {{
-      const name = (feature.properties.nam || '').toUpperCase();
-      if (name.includes('SUMACO') || name.includes('COLONSO')) {{
-        return {{ color: '#e58b1f', weight: 2.2, fillColor: '#d7dfb3', fillOpacity: 0.3 }};
-      }}
-      return {{ color: '#7c8b62', weight: .7, fillColor: '#bfc99e', fillOpacity: 0.22 }};
-    }}
+        var corredorNorLayer = L.geoJSON(DATA.nororientalCorridor, {
+            style: { color: '#0057b8', weight: 5, dashArray: '12, 10', fillOpacity: 0 }
+        }).addTo(map);
 
-    function kbaStyle() {{
-      return {{ color: '#e58b1f', weight: 2.2, fillColor: '#f2df8f', fillOpacity: 0.15, dashArray: '8 6' }};
-    }}
+        var posiblesLayer = L.geoJSON(DATA.possibleCommunities, {
+            style: { color: '#c2738f', weight: 1, fillColor: '#f5b7b1', fillOpacity: 0.85 }
+        }).addTo(map);
 
-    function ecu25Style() {{
-      return {{ color: '#1a4f10', weight: 1.5, fillColor: '#246b16', fillOpacity: 0.35 }};
-    }}
+        // ---- Communities + number labels ----
+        var commLabelMarkers = [];
+        var communitiesLayer = L.geoJSON(DATA.communities, {
+            style: { color: '#fff', weight: 2, fillColor: '#a0522d', fillOpacity: 0.8 },
+            onEachFeature: function(feature, layer) {
+                var p = feature.properties;
+                if (layer.getBounds) {
+                    var center = layer.getBounds().getCenter();
+                    var id = p.display_id || p.NUM_ID || '';
+                    var name = p.display_name || p['NAME FINAL'] || '';
+                    var ha = (p.area_ha || p.Ha || 0);
+                    layer.bindPopup('<b>' + id + '. ' + name + '</b><br>Area: ' + ha.toLocaleString('es-EC') + ' ha');
+                    var mk = L.marker(center, {
+                        icon: L.divIcon({ className: 'comm-label-icon', html: '<div class="comm-label">' + id + '</div>', iconSize: null, iconAnchor: [22, 22] }),
+                        interactive: false
+                    }).addTo(map);
+                    commLabelMarkers.push(mk);
+                }
+            }
+        }).addTo(map);
 
-    function corridorStyle() {{
-      return {{ color: '#c42d72', weight: 3, fillOpacity: 0, dashArray: '12 8' }};
-    }}
+        // ---- Waterways (rivers + streams) ----
+        function splitWater(types) {
+            return { type: 'FeatureCollection', features: DATA.waterways.features.filter(function(f) { return types.indexOf(f.properties.waterway) !== -1; }) };
+        }
+        var riverData = splitWater(['river', 'canal']);
+        var streamData = splitWater(['stream', 'drain', 'ditch']);
 
-    function napoStyle() {{
-      return {{ color: '#1c1f1d', weight: 2.5, fillOpacity: 0 }};
-    }}
+        function riverStyle() { return { color: '#0e6db4', weight: 3, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }; }
+        function streamStyle() { return { color: '#4ba3d8', weight: 1.4, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }; }
+        function waterPopup(f) {
+            var p = f.properties;
+            var label = p.waterway === 'river' ? 'Rio' : (p.waterway === 'canal' ? 'Canal' : (p.waterway === 'stream' ? 'Quebrada/estero' : 'Drenaje'));
+            var name = isNamed(p) ? normName(p.name) : 'Curso de agua sin nombre';
+            return '<b>' + name + '</b><br>Tipo: ' + label + '<br>Fuente: ' + (p.source || 'OSM');
+        }
 
-    function communityPopup(feature) {{
-      const p = feature.properties;
-      const id = p.display_id || p.NUM_ID;
-      const name = p.display_name || p['NAME FINAL'];
-      const ha = fmt.format(p.area_ha || p.Ha || 0);
-      return `
-        <div class="popup-header">
-          <div class="popup-icon comm-icon">${{id}}</div>
-          <div class="popup-title">${{name}}</div>
-        </div>
-        <div class="popup-meta">
-          <div class="popup-row"><span class="popup-row-key">Área</span><span class="popup-row-val">${{ha}} ha</span></div>
-          <div class="popup-row"><span class="popup-row-key">ID</span><span class="popup-row-val">${{id}}</span></div>
-        </div>`;
-    }}
+        var riverLabels = [];
+        var seenRiverNames = {};
+        var riverLayer = L.geoJSON(riverData, {
+            style: riverStyle,
+            onEachFeature: function(f, l) {
+                l.bindPopup(waterPopup(f));
+                var p = f.properties;
+                if (p.waterway === 'river' && isNamed(p) && l.getBounds) {
+                    var nm = normName(p.name);
+                    if (!seenRiverNames[nm]) {
+                        seenRiverNames[nm] = true;
+                        var c = l.getBounds().getCenter();
+                        var mk = L.marker(c, { icon: L.divIcon({ className: 'river-label', html: nm, iconSize: null }), interactive: false }).addTo(map);
+                        riverLabels.push(mk);
+                    }
+                }
+            }
+        }).addTo(map);
 
-    function genericPopup(icon, titleField, fields) {{
-      return feature => {{
-        const p = feature.properties;
-        const title = p[titleField] || p.name || p.Name || 'Sin nombre';
-        let rows = fields
-          .filter(f => p[f] !== undefined && p[f] !== null && p[f] !== '')
-          .map(f => `<div class="popup-row"><span class="popup-row-key">${{f}}</span><span class="popup-row-val">${{p[f]}}</span></div>`)
-          .join('');
-        return `
-          <div class="popup-header">
-            <div class="popup-icon area-icon">${{icon}}</div>
-            <div class="popup-title">${{title}}</div>
-          </div>
-          <div class="popup-meta">${{rows}}</div>`;
-      }};
-    }}
+        var streamLayer = L.geoJSON(streamData, {
+            style: streamStyle,
+            onEachFeature: function(f, l) { l.bindPopup(waterPopup(f)); }
+        }).addTo(map);
 
-    /* ═══════════════════════════════════════════
-       SPLIT WATERWAYS BY TYPE
-       ═══════════════════════════════════════════ */
-    function filterByType(fc, types) {{
-      return {{
-        type: 'FeatureCollection',
-        features: fc.features.filter(f => types.includes(f.properties.waterway))
-      }};
-    }}
+        // ---- Static park label ----
+        var parkLabel = L.marker([-0.55, -77.65], {
+            icon: L.divIcon({ className: 'park-label', html: 'Parque Nacional<br>Sumaco-Napo Galeras', iconSize: [300, 80] }),
+            interactive: false
+        }).addTo(map);
 
-    const riverData = filterByType(DATA.waterways, ['river']);
-    const streamData = filterByType(DATA.waterways, ['stream']);
-    const canalData = filterByType(DATA.waterways, ['canal']);
-    const drainData = filterByType(DATA.waterways, ['drain', 'ditch']);
+        // ---- Layer toggle from symbology ----
+        var mapLayers = {
+            'rivers':      { layer: riverLayer, extras: riverLabels },
+            'streams':     { layer: streamLayer, extras: [] },
+            'communities': { layer: communitiesLayer, extras: commLabelMarkers },
+            'posibles':    { layer: posiblesLayer, extras: [] },
+            'kba':         { layer: kbaLayer, extras: [] },
+            'ecu25':       { layer: ecu25Layer, extras: ecu25Labels },
+            'corredorNor': { layer: corredorNorLayer, extras: [] },
+            'napo':        { layer: napoLayer, extras: [] },
+            'snap':        { layer: snapLayer, extras: snapLabels }
+        };
+        function toggleLayer(el) {
+            var entry = mapLayers[el.getAttribute('data-layer')];
+            if (!entry) return;
+            var check = el.querySelector('.symb-check');
+            var isOn = check.classList.contains('checked');
+            if (isOn) {
+                check.classList.remove('checked'); check.innerHTML = ''; el.classList.add('layer-off');
+                if (entry.layer && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
+                entry.extras.forEach(function(m) { if (map.hasLayer(m)) map.removeLayer(m); });
+            } else {
+                check.classList.add('checked'); check.innerHTML = '\u2714'; el.classList.remove('layer-off');
+                if (entry.layer && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
+                entry.extras.forEach(function(m) { if (!map.hasLayer(m)) map.addLayer(m); });
+            }
+        }
 
-    /* ═══════════════════════════════════════════
-       CREATE LAYERS
-       ═══════════════════════════════════════════ */
-    const snapLayer = L.geoJSON(DATA.snap, {{ style: snapStyle, onEachFeature: (f, l) => l.bindPopup(genericPopup('🛡️', 'nam', ['map', 'are'])(f)) }});
-    const kbaLayer = L.geoJSON(DATA.kbaSumaco, {{ style: kbaStyle, onEachFeature: (f, l) => l.bindPopup(genericPopup('🌿', 'NatName', ['IntName', 'Ha'])(f)) }});
-    const ecu25Layer = L.geoJSON(DATA.kbaHuacamayos, {{ style: ecu25Style, onEachFeature: (f, l) => l.bindPopup(genericPopup('🌿', 'NatName', ['IntName', 'Ha'])(f)) }});
-    const corridorLayer = L.geoJSON(DATA.nororientalCorridor, {{ style: corridorStyle, onEachFeature: (f, l) => l.bindPopup(genericPopup('🔗', 'Name', ['ha'])(f)) }});
-    const napoLayer = L.geoJSON(DATA.napo, {{ style: napoStyle, onEachFeature: (f, l) => l.bindPopup(genericPopup('📍', 'DPA_DESPRO', ['DPA_PROVIN', 'DPA_ANIO'])(f)) }});
-    const possibleLayer = L.geoJSON(DATA.possibleCommunities, {{ style: possibleStyle, onEachFeature: (f, l) => l.bindPopup(genericPopup('🏘️', 'Comunidad', ['Propietari', 'PROP_2023', 'area_HA'])(f)) }});
-    const communitiesLayer = L.geoJSON(DATA.communities, {{ style: communityStyle, onEachFeature: (f, l) => l.bindPopup(communityPopup(f)) }});
+        // ---- UTM grid (graticule) ----
+        function drawGrid() {
+            var b = map.getBounds();
+            var step = 10000;
+            var gridFeatures = [];
+            var swUTM = proj4("EPSG:4326", "EPSG:32717", [b.getWest(), b.getSouth()]);
+            var neUTM = proj4("EPSG:4326", "EPSG:32717", [b.getEast(), b.getNorth()]);
+            var startX = Math.floor(swUTM[0] / step) * step;
+            var endX = Math.ceil(neUTM[0] / step) * step;
+            var startY = Math.floor(swUTM[1] / step) * step;
+            var endY = Math.ceil(neUTM[1] / step) * step;
+            for (var x = startX; x <= endX; x += step) {
+                var bottom = proj4("EPSG:32717", "EPSG:4326", [x, startY - step]);
+                var top = proj4("EPSG:32717", "EPSG:4326", [x, endY + step]);
+                gridFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[bottom[0], bottom[1]], [top[0], top[1]]] } });
+                var topEdge = proj4("EPSG:32717", "EPSG:4326", [x, neUTM[1]]);
+                L.marker([b.getNorth(), topEdge[0]], { icon: L.divIcon({ html: '<div class="label-inner-top">' + x + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
+                var bottomEdge = proj4("EPSG:32717", "EPSG:4326", [x, swUTM[1]]);
+                L.marker([b.getSouth(), bottomEdge[0]], { icon: L.divIcon({ html: '<div class="label-inner-bottom">' + x + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
+            }
+            for (var y = startY; y <= endY; y += step) {
+                var left = proj4("EPSG:32717", "EPSG:4326", [startX - step, y]);
+                var right = proj4("EPSG:32717", "EPSG:4326", [endX + step, y]);
+                gridFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[left[0], left[1]], [right[0], right[1]]] } });
+                var leftEdge = proj4("EPSG:32717", "EPSG:4326", [swUTM[0], y]);
+                L.marker([leftEdge[1], b.getWest()], { icon: L.divIcon({ html: '<div class="label-inner-left">' + y + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
+                var rightEdge = proj4("EPSG:32717", "EPSG:4326", [neUTM[0], y]);
+                L.marker([rightEdge[1], b.getEast()], { icon: L.divIcon({ html: '<div class="label-inner-right">' + y + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
+            }
+            L.geoJSON(gridFeatures, { style: { color: '#000', weight: 1, dashArray: '4, 4', opacity: 0.4 }, interactive: false }).addTo(map);
+        }
 
-    const riverLayer = L.geoJSON(riverData, {{ style: waterStyle, onEachFeature: (f, l) => l.bindPopup(waterPopup(f)) }});
-    const streamLayer = L.geoJSON(streamData, {{ style: waterStyle, onEachFeature: (f, l) => l.bindPopup(waterPopup(f)) }});
-    const canalLayer = L.geoJSON(canalData, {{ style: waterStyle, onEachFeature: (f, l) => l.bindPopup(waterPopup(f)) }});
-    const drainLayer = L.geoJSON(drainData, {{ style: waterStyle, onEachFeature: (f, l) => l.bindPopup(waterPopup(f)) }});
-
-    /* Community label markers */
-    const communityLabels = L.layerGroup();
-    communitiesLayer.eachLayer(layer => {{
-      if (layer.getBounds) {{
-        const center = layer.getBounds().getCenter();
-        const id = layer.feature.properties.display_id || layer.feature.properties.NUM_ID || '';
-        const icon = L.divIcon({{
-          className: 'comm-marker',
-          html: `<span>${{id}}</span>`,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15]
-        }});
-        L.marker(center, {{ icon, interactive: false }}).addTo(communityLabels);
-      }}
-    }});
-
-    /* ── Add layers in visual order ── */
-    napoLayer.addTo(map);
-    snapLayer.addTo(map);
-    kbaLayer.addTo(map);
-    ecu25Layer.addTo(map);
-    corridorLayer.addTo(map);
-    possibleLayer.addTo(map);
-    communitiesLayer.addTo(map);
-    drainLayer.addTo(map);
-    canalLayer.addTo(map);
-    streamLayer.addTo(map);
-    riverLayer.addTo(map);
-    communityLabels.addTo(map);
-
-    /* ── Layer control ── */
-    L.control.layers(
-      {{ 'OSM': osmBase, 'Satélite': satellite, 'Topográfico': topoMap }},
-      {{
-        'Ríos': riverLayer,
-        'Quebradas': streamLayer,
-        'Canales': canalLayer,
-        'Drenajes': drainLayer,
-        'Comunidades': communitiesLayer,
-        'Etiquetas': communityLabels,
-        'Posibles comunidades': possibleLayer,
-        'SNAP': snapLayer,
-        'KBA Sumaco': kbaLayer,
-        'KBA Huacamayos': ecu25Layer,
-        'Corredor NorOriental': corridorLayer,
-        'Napo': napoLayer
-      }},
-      {{ collapsed: true, position: 'topright' }}
-    ).addTo(map);
-
-    /* ═══════════════════════════════════════════
-       FIT BOUNDS
-       ═══════════════════════════════════════════ */
-    if (Array.isArray(DATA.metadata.map_bounds) && DATA.metadata.map_bounds.length === 4) {{
-      const b = DATA.metadata.map_bounds;
-      map.fitBounds(L.latLngBounds([b[1], b[0]], [b[3], b[2]]).pad(0.08));
-    }} else {{
-      map.fitBounds(L.featureGroup([communitiesLayer, riverLayer]).getBounds().pad(0.08));
-    }}
-
-    /* ═══════════════════════════════════════════
-       LEGEND TOGGLE
-       ═══════════════════════════════════════════ */
-    const LAYER_MAP = {{
-      rivers: riverLayer,
-      streams: streamLayer,
-      canals: canalLayer,
-      drains: drainLayer,
-      communities: communitiesLayer,
-      possible: possibleLayer,
-      snap: snapLayer,
-      kba: kbaLayer,
-      ecu25: ecu25Layer,
-      corridor: corridorLayer,
-      napo: napoLayer
-    }};
-
-    function toggleLegend(el) {{
-      const key = el.dataset.layer;
-      const layer = LAYER_MAP[key];
-      if (!layer) return;
-
-      if (el.classList.contains('off')) {{
-        el.classList.remove('off');
-        map.addLayer(layer);
-        if (key === 'communities') map.addLayer(communityLabels);
-      }} else {{
-        el.classList.add('off');
-        map.removeLayer(layer);
-        if (key === 'communities') map.removeLayer(communityLabels);
-      }}
-    }}
-
-    /* ═══════════════════════════════════════════
-       POPULATE STATS
-       ═══════════════════════════════════════════ */
-    const namedRivers = DATA.waterways.features.filter(f => {{
-      const n = f.properties.name;
-      return n && n !== 'Sin nombre' && n !== f.properties.waterway;
-    }}).length;
-
-    const totalArea = DATA.communities.features.reduce((sum, f) => {{
-      return sum + (f.properties.area_ha || f.properties.Ha || 0);
-    }}, 0);
-
-    document.getElementById('stat-waterways').textContent = fmt.format(DATA.waterways.features.length);
-    document.getElementById('stat-rivers').textContent = fmt.format(namedRivers);
-    document.getElementById('stat-communities').textContent = fmt.format(DATA.communities.features.length);
-    document.getElementById('stat-area').textContent = fmt.format(Math.round(totalArea));
-
-    document.getElementById('count-river').textContent = riverData.features.length + ' tramos';
-    document.getElementById('count-stream').textContent = streamData.features.length + ' tramos';
-    document.getElementById('count-canal').textContent = canalData.features.length + ' tramos';
-    document.getElementById('count-drain').textContent = drainData.features.length + ' tramos';
-
-    /* ═══════════════════════════════════════════
-       POPULATE COMMUNITY TABLE
-       ═══════════════════════════════════════════ */
-    const tbody = document.getElementById('communities-tbody');
-    DATA.communities.features.forEach(feature => {{
-      const p = feature.properties;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="td-id">${{p.display_id || p.NUM_ID}}</td><td>${{p.display_name || p['NAME FINAL']}}</td><td class="td-ha">${{fmt.format(p.area_ha || p.Ha || 0)}}</td>`;
-      tr.addEventListener('click', () => {{
-        const layer = communitiesLayer.getLayers().find(item => item.feature === feature);
-        if (layer && layer.getBounds) {{
-          map.fitBounds(layer.getBounds(), {{ maxZoom: 14, padding: [80, 80] }});
-          layer.openPopup();
-        }}
-      }});
-      tbody.appendChild(tr);
-    }});
-
-    /* ═══════════════════════════════════════════
-       SEARCH
-       ═══════════════════════════════════════════ */
-    const searchInput = document.getElementById('search-input');
-    searchInput.addEventListener('input', function() {{
-      const q = this.value.toLowerCase().trim();
-      if (!q) {{
-        // Reset table
-        tbody.querySelectorAll('tr').forEach(tr => tr.style.display = '');
-        return;
-      }}
-
-      // Filter communities table
-      tbody.querySelectorAll('tr').forEach(tr => {{
-        const text = tr.textContent.toLowerCase();
-        tr.style.display = text.includes(q) ? '' : 'none';
-      }});
-
-      // Highlight matching waterway on map
-      riverLayer.eachLayer(l => {{
-        const name = (l.feature.properties.name || '').toLowerCase();
-        if (name.includes(q) && q.length > 2) {{
-          l.setStyle({{ weight: 6, opacity: 1, color: '#00ffaa' }});
-        }} else {{
-          l.setStyle(waterStyle(l.feature));
-        }}
-      }});
-      streamLayer.eachLayer(l => {{
-        const name = (l.feature.properties.name || '').toLowerCase();
-        if (name.includes(q) && q.length > 2) {{
-          l.setStyle({{ weight: 4, opacity: 1, color: '#00ffaa' }});
-        }} else {{
-          l.setStyle(waterStyle(l.feature));
-        }}
-      }});
-    }});
-  </script>
+        // ---- Fixed 1:100000 scale centered on the corridor ----
+        var bounds = L.geoJSON(DATA.communities).getBounds();
+        var center = bounds.getCenter();
+        var desiredScale = 100000;
+        var earthCircumference = 40075016;
+        var dpi = 96;
+        var pxPerMeter = dpi * 39.3701;
+        var scaleAtZoom0 = (earthCircumference * Math.cos(center.lat * Math.PI / 180) * pxPerMeter) / 256;
+        var exactZoom = Math.log2(scaleAtZoom0 / desiredScale);
+        map.setView(center, exactZoom);
+        setTimeout(drawGrid, 500);
+    </script>
 </body>
 </html>
 """
@@ -1287,8 +514,12 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("docs/index.html"))
     args = parser.parse_args()
 
+    rows = community_rows(args.data)
+    tables_html = build_tables_html(rows)
+    html = html_template(js_data_var(args.data), tables_html)
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(html_template(js_data_var(args.data)), encoding="utf-8")
+    args.output.write_text(html, encoding="utf-8")
     print(args.output)
 
 

@@ -17,13 +17,23 @@ GeoPackage contiene 24 comunidades y omite `CENTRO URBANO HUATICOCHA` (`NUM_ID`
 ## Estructura
 
 ```text
-assets/            Assets fuente reutilizables
 data/processed/    GeoJSON generados para el mapa
-docs/              Sitio estatico de GitHub Pages
+docs/              Sitio estatico de GitHub Pages (autocontenido)
+  assets/          Vendor (Leaflet, proj4) e imagenes/logos
+  inset_*.png      Mapas de ubicacion (Ecuador y provincial)
+  index.html       Mapa A0 generado
 tools/             Scripts de extraccion y construccion
 tests/             Validaciones basicas
 ANALISIS_DATOS.md  Inventario y diagnostico de la base GIS
 ```
+
+## Formato
+
+El mapa usa el formato estandar institucional Yacu Warmi: poster A0 horizontal
+(1189 x 841 mm) imprimible a PDF, con columna izquierda (mapas de ubicacion,
+simbologia conmutable, recuadro institucional, escala y logos) y columna derecha
+(banner de titulo, mapa Leaflet con grilla UTM zona 17S y tabla de comunidades).
+La hidrografia (rios y quebradas) se dibuja en azul sobre las capas territoriales.
 
 ## Construccion local
 

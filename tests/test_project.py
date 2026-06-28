@@ -12,8 +12,11 @@ def load_json(relative_path):
 def test_expected_files_exist():
     for relative_path in [
         "docs/index.html",
-        "assets/vendor/leaflet.css",
-        "assets/vendor/leaflet.js",
+        "docs/assets/vendor/leaflet.css",
+        "docs/assets/vendor/leaflet.js",
+        "docs/assets/vendor/proj4.js",
+        "docs/inset_ecuador.png",
+        "docs/inset_napo.png",
         "data/processed/communities.geojson",
         "data/processed/waterways.geojson",
         "data/processed/metadata.json",
@@ -44,3 +47,8 @@ def test_html_embeds_map_data():
     assert "const DATA =" in html
     assert "Quebradas" in html
     assert "CENTRO URBANO HUATICOCHA" in html
+    # Standard A0 poster format markers
+    assert "page-container" in html
+    assert "map-title-banner" in html
+    assert "SIMBOLOGIA" in html
+    assert "size: A0 landscape" in html
