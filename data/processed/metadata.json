@@ -1,0 +1,129 @@
+{
+  "generated_at": "2026-06-28T03:14:57.280606+00:00",
+  "source_root": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8",
+  "exports": [
+    {
+      "name": "communities",
+      "path": "data/processed/communities.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/SHP/Comunidades_del_corredor-25.shp",
+      "layer": "Comunidades_del_corredor-25",
+      "feature_count": 25,
+      "bounds": [
+        -77.90081958808592,
+        -0.883627111577282,
+        -77.21945145731087,
+        -0.370263846999776
+      ]
+    },
+    {
+      "name": "possible_communities",
+      "path": "data/processed/possible_communities.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "Posibles_comunidades_a_integrar",
+      "feature_count": 4,
+      "bounds": [
+        -77.86059299776993,
+        -0.816437552558108,
+        -77.31412789775732,
+        -0.462384586366815
+      ]
+    },
+    {
+      "name": "corridor_polygon",
+      "path": "data/processed/corridor_polygon.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "Poligono_Corredor",
+      "feature_count": 1,
+      "bounds": [
+        -77.90130173074824,
+        -0.883627111577173,
+        -77.20053857344583,
+        -0.346223055457325
+      ]
+    },
+    {
+      "name": "kba_sumaco",
+      "path": "data/processed/kba_sumaco.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "Ecu_52_kba",
+      "feature_count": 1,
+      "bounds": [
+        -77.82989501973935,
+        -0.950273812786186,
+        -77.2077941888507,
+        -0.049438470309096
+      ]
+    },
+    {
+      "name": "kba_huacamayos",
+      "path": "data/processed/kba_huacamayos.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "Ecu_25",
+      "feature_count": 1,
+      "bounds": [
+        -78.11004638623172,
+        -1.029912793640454,
+        -77.80105590840338,
+        -0.585011807548823
+      ]
+    },
+    {
+      "name": "nororiental_corridor",
+      "path": "data/processed/nororiental_corridor.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "Corredor_NorOriental",
+      "feature_count": 1,
+      "bounds": [
+        -78.259149,
+        -1.063462,
+        -77.17178,
+        0.321486
+      ]
+    },
+    {
+      "name": "snap",
+      "path": "data/processed/snap.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "Actualizacion_SNAP",
+      "feature_count": 80,
+      "bounds": [
+        -93.00756521165368,
+        -4.841484565298734,
+        -75.22118083395952,
+        3.395768327860651
+      ]
+    },
+    {
+      "name": "provinces",
+      "path": "data/processed/provinces.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "ORGANIZACION_TERRITORIAL_PROVINCIAL",
+      "feature_count": 26,
+      "bounds": [
+        -92.0091720760688,
+        -5.015617058133452,
+        -75.18714674699454,
+        1.681581113055162
+      ]
+    },
+    {
+      "name": "napo",
+      "path": "data/processed/napo.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
+      "layer": "ORGANIZACION_TERRITORIAL_PROVINCIAL",
+      "feature_count": 1,
+      "bounds": [
+        -78.43006838300153,
+        -1.248816249669192,
+        -77.02282762463238,
+        0.034175760456086
+      ]
+    }
+  ],
+  "map_bounds": [
+    -77.90081958808592,
+    -0.883627111577282,
+    -77.21945145731087,
+    -0.370263846999776
+  ]
+}
