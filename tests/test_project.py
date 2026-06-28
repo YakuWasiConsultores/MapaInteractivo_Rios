@@ -42,5 +42,5 @@ def test_waterways_are_line_features():
 def test_html_embeds_map_data():
     html = (ROOT / "docs/index.html").read_text(encoding="utf-8")
     assert "const DATA =" in html
-    assert "Rios y quebradas" in html
+    assert "Quebradas" in html
     assert "CENTRO URBANO HUATICOCHA" in html
