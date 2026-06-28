@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-28T03:14:57.280606+00:00",
+  "generated_at": "2026-06-28T05:00:09.153128+00:00",
   "source_root": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8",
   "exports": [
     {
@@ -85,12 +85,12 @@
       "path": "data/processed/snap.geojson",
       "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
       "layer": "Actualizacion_SNAP",
-      "feature_count": 80,
+      "feature_count": 22,
       "bounds": [
-        -93.00756521165368,
-        -4.841484565298734,
-        -75.22118083395952,
-        3.395768327860651
+        -78.58157074425331,
+        -1.35,
+        -77.1130503360602,
+        0.45
       ]
     },
     {
@@ -98,12 +98,12 @@
       "path": "data/processed/provinces.geojson",
       "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
       "layer": "ORGANIZACION_TERRITORIAL_PROVINCIAL",
-      "feature_count": 26,
+      "feature_count": 9,
       "bounds": [
-        -92.0091720760688,
-        -5.015617058133452,
-        -75.18714674699454,
-        1.681581113055162
+        -78.6,
+        -1.35,
+        -76.8,
+        0.45
       ]
     },
     {

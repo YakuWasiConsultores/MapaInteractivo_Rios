@@ -17,6 +17,14 @@ DEFAULT_SOURCE = Path(
 )
 
 
+# Study-area clip box (WGS84: west, south, east, north).
+# It is deliberately larger than the printed 1:100000 frame so no clipped edges
+# are ever visible, yet it keeps all thematic layers (communities, corridor,
+# KBA, Napo, NorOriental) whole while trimming the oversized reference layers
+# (SNAP, provinces) that otherwise span the whole country, including Galapagos.
+CLIP_BBOX = (-78.60, -1.35, -76.80, 0.45)
+
+
 LAYER_SPECS = [
     {
         "name": "communities",
@@ -60,12 +68,14 @@ LAYER_SPECS = [
         "source": "GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
         "layer": "Actualizacion_SNAP",
         "simplify": 0.00012,
+        "clip": True,
     },
     {
         "name": "provinces",
         "source": "GEOPACKAGE/Corredor_de_conectividad_7_Datos.gpkg",
         "layer": "ORGANIZACION_TERRITORIAL_PROVINCIAL",
         "simplify": 0.00018,
+        "clip": True,
     },
     {
         "name": "napo",
@@ -92,6 +102,40 @@ def wgs84_srs() -> osr.SpatialReference:
     return srs
 
 
+def clip_geometry() -> ogr.Geometry:
+    west, south, east, north = CLIP_BBOX
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint_2D(west, south)
+    ring.AddPoint_2D(east, south)
+    ring.AddPoint_2D(east, north)
+    ring.AddPoint_2D(west, north)
+    ring.AddPoint_2D(west, south)
+    polygon = ogr.Geometry(ogr.wkbPolygon)
+    polygon.AddGeometry(ring)
+    return polygon
+
+
+def polygons_only(geom: ogr.Geometry) -> ogr.Geometry | None:
+    """Keep only polygonal parts; intersection can yield GeometryCollections."""
+    name = geom.GetGeometryName()
+    if name in ("POLYGON", "MULTIPOLYGON"):
+        return geom
+    if name != "GEOMETRYCOLLECTION":
+        return None
+    merged = ogr.Geometry(ogr.wkbMultiPolygon)
+    for index in range(geom.GetGeometryCount()):
+        part = geom.GetGeometryRef(index)
+        part_name = part.GetGeometryName()
+        if part_name == "POLYGON":
+            merged.AddGeometry(part)
+        elif part_name == "MULTIPOLYGON":
+            for sub in range(part.GetGeometryCount()):
+                merged.AddGeometry(part.GetGeometryRef(sub))
+    if merged.GetGeometryCount() == 0:
+        return None
+    return merged
+
+
 def field_value(feature: ogr.Feature, index: int) -> Any:
     if not feature.IsFieldSet(index):
         return None
@@ -114,11 +158,19 @@ def geometry_to_json(
     geometry: ogr.Geometry,
     transform: osr.CoordinateTransformation | None,
     simplify: float,
+    clip: ogr.Geometry | None = None,
 ) -> dict[str, Any] | None:
     geom = geometry.Clone()
     geom.FlattenTo2D()
     if transform is not None:
         geom.Transform(transform)
+    if clip is not None:
+        geom = geom.Intersection(clip)
+        if geom is None or geom.IsEmpty():
+            return None
+        geom = polygons_only(geom)
+        if geom is None or geom.IsEmpty():
+            return None
     if simplify > 0:
         simplified = geom.SimplifyPreserveTopology(simplify)
         if simplified is not None and not simplified.IsEmpty():
@@ -174,13 +226,16 @@ def export_layer(source_root: Path, output_dir: Path, spec: dict[str, Any]) -> d
     if src_srs is not None and not src_srs.IsSame(dst_srs):
         transform = osr.CoordinateTransformation(src_srs, dst_srs)
 
+    clip = clip_geometry() if spec.get("clip") else None
     features = []
     bounds: list[float] | None = None
     for feature in layer:
         geom_ref = feature.GetGeometryRef()
         if geom_ref is None:
             continue
-        geom_json = geometry_to_json(geom_ref, transform, float(spec.get("simplify", 0)))
+        geom_json = geometry_to_json(
+            geom_ref, transform, float(spec.get("simplify", 0)), clip
+        )
         if geom_json is None:
             continue
         props = properties_for(feature)
