@@ -52,3 +52,6 @@ def test_html_embeds_map_data():
     assert "map-title-banner" in html
     assert "SIMBOLOGIA" in html
     assert "size: A0 landscape" in html
+    # Must be a static poster: no interactive tile basemap, no panning
+    assert "tileLayer" not in html
+    assert "dragging: false" in html

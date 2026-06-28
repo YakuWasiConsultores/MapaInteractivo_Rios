@@ -183,7 +183,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 
         /* Right Column Items */
         .map-wrapper { flex: 4; min-height: 800px; position: relative; background: #fafafa; }
-        #map { width: 100%; height: 100%; background: #eaf4fb; }
+        #map { width: 100%; height: 100%; background: #fff; }
         .map-title-banner {
             position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
             background: #fff; padding: 20px 40px; font-size: 2.6rem; font-weight: bold;
@@ -313,12 +313,13 @@ TEMPLATE += r"""
             return p.name && p.name !== 'Sin nombre' && p.name !== p.waterway;
         }
 
-        const map = L.map('map', { zoomControl: true, preferCanvas: true, attributionControl: true });
-
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        }).addTo(map);
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false,
+            dragging: false, touchZoom: false, scrollWheelZoom: false,
+            doubleClickZoom: false, boxZoom: false, keyboard: false,
+            zoomSnap: 0, zoomDelta: 0.1
+        });
 
         proj4.defs("EPSG:32717", "+proj=utm +zone=17 +south +datum=WGS84 +units=m +no_defs");
 
