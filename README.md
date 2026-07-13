@@ -19,6 +19,7 @@ póster A0 horizontal imprimible a PDF.
 │   └── inset_napo.png     ← Mapa de ubicación (provincial)
 │
 ├── data/processed/        ← GeoJSON procesados (WGS84) usados por el mapa
+├── data/source/           ← GeoPackage crudos locales, ignorados por Git
 ├── tools/                 ← Scripts de extracción y construcción
 ├── tests/                 ← Tests
 └── ANALISIS_DATOS.md      ← Inventario y diagnóstico de la base GIS
@@ -57,7 +58,8 @@ git push -u origin main
 - Python 3.11 o superior
 - GDAL/OGR con bindings de Python (`osgeo`) — solo para `export_base_layers.py`
 - Google Chrome/Chromium — solo para exportar/capturar el PDF A0
-- Archivos fuente QGIS/GeoPackage originales — solo para regenerar los datos
+- Archivos fuente QGIS/GeoPackage originales en `data/source/` — solo para
+  regenerar los datos
 
 ### Construcción
 
@@ -93,12 +95,13 @@ para `@page { size: A0 landscape }`.
 Los GeoJSON en `data/processed/` constituyen el snapshot procesado utilizado por
 la construcción del mapa.
 
-- **Comunidades:** si existe `CORREDOR 5.gpkg` en la raiz del proyecto, la
+- **Comunidades:** si existe `data/source/CORREDOR 5.gpkg`, la
   exportacion toma esa capa local como fuente prioritaria y limpia slivers
   degenerados antes de generar `communities.geojson`. El snapshot actual queda
   en 27 comunidades visibles, incluyendo `COMUNA JUMANDI` y
   `COMUNA KICHWA VERDE SUMACO`.
-- **Hidrografía:** si existe `Rios_filtrado_suavizado_optimizado.gpkg`, se usa
+- **Hidrografía:** si existe
+  `data/source/Rios_filtrado_suavizado_optimizado.gpkg`, se usa
   como fuente prioritaria. La capa tiene siete trazados jerarquizados (`ORDER`
   5--11) en EPSG:32718; los órdenes 9--11 se muestran como ríos principales y
   los 5--8 como quebradas y esteros. La descarga OSM queda solo como respaldo

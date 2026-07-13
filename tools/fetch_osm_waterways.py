@@ -14,7 +14,15 @@ from typing import Any
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LOCAL_WATERWAYS_GPKG = REPO_ROOT / "Rios_filtrado_suavizado_optimizado.gpkg"
+LOCAL_SOURCE_DIR = REPO_ROOT / "data" / "source"
+
+
+def local_source_file(filename: str) -> Path:
+    candidates = [LOCAL_SOURCE_DIR / filename, REPO_ROOT / filename]
+    return next((path for path in candidates if path.exists()), candidates[0])
+
+
+LOCAL_WATERWAYS_GPKG = local_source_file("Rios_filtrado_suavizado_optimizado.gpkg")
 
 
 def read_bbox(metadata_path: Path) -> tuple[float, float, float, float]:
@@ -99,7 +107,7 @@ def main() -> None:
 
     if LOCAL_WATERWAYS_GPKG.exists() and not args.force_osm:
         print(
-            "No se descargo OSM: existe Rios_filtrado_suavizado_optimizado.gpkg. "
+            f"No se descargo OSM: existe {LOCAL_WATERWAYS_GPKG}. "
             "Use export_base_layers.py para regenerar la hidrografia local o "
             "--force-osm para reemplazarla de forma provisional."
         )

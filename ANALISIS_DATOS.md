@@ -17,9 +17,9 @@ inventario inicial:
 
 | Archivo | Capa | Resultado de la revision | Uso incorporado |
 |---|---|---|---|
-| `CORREDOR 5.gpkg` | `unin` | 28 poligonos en EPSG:32718; uno es un sliver de 0.003 m2. | Exporta 27 comunidades visibles y conserva los IDs existentes. |
-| `Rios_filtrado_1.gpkg` | `smoothed` | 7 trazados, ordenes 5--11, 8.56 millones de vertices. | Se conserva como intermedio, no se publica. |
-| `Rios_filtrado_suavizado_optimizado.gpkg` | `Rios_filtrado_suavizado_optimizado` | Misma cobertura, 7 trazados validos en EPSG:32718, 134,762 vertices y 9,122.70 km. | Fuente prioritaria de `waterways.geojson`. |
+| `data/source/CORREDOR 5.gpkg` | `unin` | 28 poligonos en EPSG:32718; uno es un sliver de 0.003 m2. | Exporta 27 comunidades visibles y conserva los IDs existentes. |
+| `data/source/Rios_filtrado_1.gpkg` | `smoothed` | 7 trazados, ordenes 5--11, 8.56 millones de vertices. | Se conserva como intermedio, no se publica. |
+| `data/source/Rios_filtrado_suavizado_optimizado.gpkg` | `Rios_filtrado_suavizado_optimizado` | Misma cobertura, 7 trazados validos en EPSG:32718, 134,762 vertices y 9,122.70 km. | Fuente prioritaria de `waterways.geojson`. |
 
 La version optimizada mantiene practicamente toda la longitud de la capa
 intermedia, pero reduce el numero de vertices aproximadamente 64 veces. No
@@ -178,10 +178,10 @@ Para iniciar la implementacion del mapa HTML:
 
 ## Actualizacion de etiquetas hidrograficas - 2026-07-13
 
-Se mantuvo `Rios_filtrado_suavizado_optimizado.gpkg` como capa hidrografica
-principal del mapa. Para no perder los nombres disponibles en la capa anterior,
-se genero `data/processed/waterway_labels.geojson` a partir del snapshot OSM
-previo (`5bc9090:data/processed/waterways.geojson`).
+Se mantuvo `data/source/Rios_filtrado_suavizado_optimizado.gpkg` como capa
+hidrografica principal del mapa. Para no perder los nombres disponibles en la
+capa anterior, se genero `data/processed/waterway_labels.geojson` a partir del
+snapshot OSM previo (`5bc9090:data/processed/waterways.geojson`).
 
 Resultado:
 

@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-07-13T15:13:11.713768+00:00",
+  "generated_at": "2026-07-13T15:28:28.217621+00:00",
   "source_root": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8",
   "exports": [
     {
       "name": "communities",
       "path": "data/processed/communities.geojson",
-      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/CORREDOR 5.gpkg",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/data/source/CORREDOR 5.gpkg",
       "layer": "unin",
       "feature_count": 27,
       "bounds": [
@@ -21,7 +21,7 @@
     {
       "name": "waterways",
       "path": "data/processed/waterways.geojson",
-      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/Rios_filtrado_suavizado_optimizado.gpkg",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/data/source/Rios_filtrado_suavizado_optimizado.gpkg",
       "source_label": "Rios filtrados y suavizados (capa local revisada)",
       "layer": "Rios_filtrado_suavizado_optimizado",
       "feature_count": 7,

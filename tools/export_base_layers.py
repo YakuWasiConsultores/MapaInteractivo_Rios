@@ -18,8 +18,16 @@ DEFAULT_SOURCE = Path(
     "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8"
 )
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LOCAL_COMMUNITIES_GPKG = REPO_ROOT / "CORREDOR 5.gpkg"
-LOCAL_WATERWAYS_GPKG = REPO_ROOT / "Rios_filtrado_suavizado_optimizado.gpkg"
+LOCAL_SOURCE_DIR = REPO_ROOT / "data" / "source"
+
+
+def local_source_file(filename: str) -> Path:
+    candidates = [LOCAL_SOURCE_DIR / filename, REPO_ROOT / filename]
+    return next((path for path in candidates if path.exists()), candidates[0])
+
+
+LOCAL_COMMUNITIES_GPKG = local_source_file("CORREDOR 5.gpkg")
+LOCAL_WATERWAYS_GPKG = local_source_file("Rios_filtrado_suavizado_optimizado.gpkg")
 LOCAL_WATERWAYS_LAYER = "Rios_filtrado_suavizado_optimizado"
 SLIVER_AREA_M2 = 1.0
 MAIN_RIVER_MIN_ORDER = 9
