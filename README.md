@@ -29,7 +29,7 @@ póster A0 horizontal imprimible a PDF.
 El mapa usa el formato estándar institucional Yacu Warmi: póster **A0 horizontal
 (1189 × 841 mm)** estático e imprimible a PDF, con columna izquierda (mapas de
 ubicación, simbología conmutable, recuadro institucional, escala y logos) y
-columna derecha (banner de título, mapa con grilla UTM zona 17S y tabla de
+columna derecha (banner de título, mapa con grilla UTM y tabla de
 comunidades). La hidrografía (ríos y quebradas) se dibuja en azul sobre las
 capas territoriales. El mapa es estático: sin tiles de fondo, sin zoom ni
 desplazamiento, fijado a escala 1:100000.
@@ -63,10 +63,13 @@ git push -u origin main
 
 ```bash
 python3 tools/export_base_layers.py    # extrae, reproyecta y recorta las capas GIS
-python3 tools/fetch_osm_waterways.py    # descarga ríos y quebradas desde OSM (provisional)
+python3 tools/extract_previous_waterway_labels.py  # recupera nombres desde la capa anterior
 python3 tools/build_html.py             # genera docs/index.html
 python3 -m pytest                       # valida datos y recursos
 ```
+
+Para reemplazar manualmente la hidrografía local por la fuente provisional de
+OpenStreetMap, ejecutar `python3 tools/fetch_osm_waterways.py --force-osm`.
 
 El HTML generado queda en `docs/index.html`.
 
@@ -76,6 +79,7 @@ El HTML generado queda en `docs/index.html`.
 |---|---|
 | `tools/export_base_layers.py` | Exporta las capas del GeoPackage/SHP a GeoJSON WGS84, reproyecta, simplifica y recorta SNAP/provincias al área de estudio |
 | `tools/fetch_osm_waterways.py` | Descarga ríos y quebradas desde OpenStreetMap (Overpass) para el área del corredor |
+| `tools/extract_previous_waterway_labels.py` | Extrae nombres hidrográficos desde la capa OSM anterior sin reemplazar la hidrografía local |
 | `tools/build_html.py` | Construye el póster A0 estático en `docs/index.html` |
 
 ### Exportación PDF
@@ -89,12 +93,19 @@ para `@page { size: A0 landscape }`.
 Los GeoJSON en `data/processed/` constituyen el snapshot procesado utilizado por
 la construcción del mapa.
 
-- **Comunidades:** se exportan desde el SHP, no desde el GeoPackage, porque el
-  GeoPackage contiene 24 comunidades y omite `CENTRO URBANO HUATICOCHA`
-  (`NUM_ID` 18). El SHP y el PNG de referencia contienen las 25 esperadas.
-- **Hidrografía:** la base GIS revisada no contiene una capa local de ríos o
-  quebradas, por lo que `waterways.geojson` se genera desde OpenStreetMap y debe
-  tratarse como capa **provisional** hasta reemplazarla por una fuente oficial.
+- **Comunidades:** si existe `CORREDOR 5.gpkg` en la raiz del proyecto, la
+  exportacion toma esa capa local como fuente prioritaria y limpia slivers
+  degenerados antes de generar `communities.geojson`. El snapshot actual queda
+  en 27 comunidades visibles, incluyendo `COMUNA JUMANDI` y
+  `COMUNA KICHWA VERDE SUMACO`.
+- **Hidrografía:** si existe `Rios_filtrado_suavizado_optimizado.gpkg`, se usa
+  como fuente prioritaria. La capa tiene siete trazados jerarquizados (`ORDER`
+  5--11) en EPSG:32718; los órdenes 9--11 se muestran como ríos principales y
+  los 5--8 como quebradas y esteros. La descarga OSM queda solo como respaldo
+  explícito con `--force-osm`.
+- **Nombres hidrográficos:** `waterway_labels.geojson` recupera los nombres
+  disponibles en la capa OSM anterior y los sobrepone como etiquetas; no
+  modifica la capa local actual de ríos y quebradas.
 - **SNAP y provincias:** se recortan al área de estudio (abarcan todo Ecuador en
   origen, incluido Galápagos), manteniendo intactas las capas temáticas.
 
@@ -106,4 +117,4 @@ GIS fuente.
 - [Leaflet](https://leafletjs.com/) — Render del mapa
 - [Proj4js](http://proj4js.org/) — Grilla UTM y transformación de coordenadas
 - [GDAL/OGR](https://gdal.org/) — Extracción y reproyección de capas
-- [OpenStreetMap](https://www.openstreetmap.org/) — Hidrografía (vía Overpass API)
+- [OpenStreetMap](https://www.openstreetmap.org/) — Nombres hidrográficos de la capa anterior

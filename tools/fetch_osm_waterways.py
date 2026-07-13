@@ -13,6 +13,8 @@ from typing import Any
 
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LOCAL_WATERWAYS_GPKG = REPO_ROOT / "Rios_filtrado_suavizado_optimizado.gpkg"
 
 
 def read_bbox(metadata_path: Path) -> tuple[float, float, float, float]:
@@ -88,7 +90,20 @@ def main() -> None:
         type=Path,
         default=Path("data/processed/waterways.geojson"),
     )
+    parser.add_argument(
+        "--force-osm",
+        action="store_true",
+        help="Replace the reviewed local hydrography with provisional OSM data.",
+    )
     args = parser.parse_args()
+
+    if LOCAL_WATERWAYS_GPKG.exists() and not args.force_osm:
+        print(
+            "No se descargo OSM: existe Rios_filtrado_suavizado_optimizado.gpkg. "
+            "Use export_base_layers.py para regenerar la hidrografia local o "
+            "--force-osm para reemplazarla de forma provisional."
+        )
+        return
 
     bbox = read_bbox(args.metadata)
     query = overpass_query(bbox)

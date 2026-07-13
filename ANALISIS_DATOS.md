@@ -10,6 +10,26 @@ La base contiene datos suficientes para reconstruir un mapa HTML tipo A0 como el
 
 Recomendacion inicial: usar el SHP de `Comunidades_del_corredor-25` como fuente de comunidades, o reparar el GeoPackage incorporando la entidad faltante antes de exportar GeoJSON. Para el resto de capas, el GeoPackage es suficiente como fuente maestra.
 
+## Actualizacion de fuentes locales - 2026-07-13
+
+Se añadieron tres GeoPackages al proyecto que reemplazan dos supuestos del
+inventario inicial:
+
+| Archivo | Capa | Resultado de la revision | Uso incorporado |
+|---|---|---|---|
+| `CORREDOR 5.gpkg` | `unin` | 28 poligonos en EPSG:32718; uno es un sliver de 0.003 m2. | Exporta 27 comunidades visibles y conserva los IDs existentes. |
+| `Rios_filtrado_1.gpkg` | `smoothed` | 7 trazados, ordenes 5--11, 8.56 millones de vertices. | Se conserva como intermedio, no se publica. |
+| `Rios_filtrado_suavizado_optimizado.gpkg` | `Rios_filtrado_suavizado_optimizado` | Misma cobertura, 7 trazados validos en EPSG:32718, 134,762 vertices y 9,122.70 km. | Fuente prioritaria de `waterways.geojson`. |
+
+La version optimizada mantiene practicamente toda la longitud de la capa
+intermedia, pero reduce el numero de vertices aproximadamente 64 veces. No
+incluye nombres de rios; por ello el mapa muestra el tipo de curso y su orden
+hidrologico, sin crear etiquetas nominales no respaldadas por la fuente.
+
+Para la simbologia del mapa, los ordenes 9--11 se clasifican como rios
+principales y los ordenes 5--8 como quebradas y esteros. La capa OSM ya no se
+usa por defecto y queda disponible solamente como respaldo manual.
+
 ## Inventario de archivos
 
 | Tipo | Archivo/directorio | Observacion |
@@ -155,3 +175,25 @@ Para iniciar la implementacion del mapa HTML:
 3. Generar `docs/index.html` con Leaflet y assets locales.
 4. Validar que el HTML muestre 25 comunidades y que la tabla incluya `CENTRO URBANO HUATICOCHA`.
 5. Comparar visualmente contra el PNG de referencia con captura de Chrome headless.
+
+## Actualizacion de etiquetas hidrograficas - 2026-07-13
+
+Se mantuvo `Rios_filtrado_suavizado_optimizado.gpkg` como capa hidrografica
+principal del mapa. Para no perder los nombres disponibles en la capa anterior,
+se genero `data/processed/waterway_labels.geojson` a partir del snapshot OSM
+previo (`5bc9090:data/processed/waterways.geojson`).
+
+Resultado:
+
+| Tipo de etiqueta | Cantidad |
+|---|---:|
+| Rios principales | 50 |
+| Cauces/quebradas | 27 |
+| Esteros | 1 |
+| Cascadas | 0 |
+
+La capa anterior tenia 337 cursos de agua OSM, de los cuales 124 segmentos
+tenian nombre util. Para evitar saturacion visual se deduplico a 78 etiquetas
+unicas por nombre y tipo, ubicadas en el punto medio del tramo mas largo de cada
+nombre. No se inventaron nombres para cascadas: el snapshot anterior no incluia
+objetos nombrados de ese tipo.

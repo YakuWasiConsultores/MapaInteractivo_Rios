@@ -19,27 +19,59 @@ def test_expected_files_exist():
         "docs/inset_napo.png",
         "data/processed/communities.geojson",
         "data/processed/waterways.geojson",
+        "data/processed/waterway_labels.geojson",
         "data/processed/metadata.json",
         "ANALISIS_DATOS.md",
     ]:
         assert (ROOT / relative_path).exists(), relative_path
 
 
-def test_communities_keep_25_features_and_huaticocha():
+def test_communities_keep_27_features_and_new_communities():
     communities = load_json("data/processed/communities.geojson")
     names = {feature["properties"]["NAME FINAL"] for feature in communities["features"]}
     ids = {feature["properties"]["NUM_ID"] for feature in communities["features"]}
-    assert len(communities["features"]) == 25
+    assert len(communities["features"]) == 27
+    assert ids == set(range(1, 28))
     assert "CENTRO URBANO HUATICOCHA" in names
-    assert 18 in ids
+    assert "COMUNA JUMANDI" in names
+    assert "COMUNA KICHWA VERDE SUMACO" in names
 
 
-def test_waterways_are_line_features():
+def test_waterways_use_the_reviewed_local_hydrography():
     waterways = load_json("data/processed/waterways.geojson")
-    assert len(waterways["features"]) > 0
+    assert len(waterways["features"]) == 7
     assert {
         feature["geometry"]["type"] for feature in waterways["features"]
-    } <= {"LineString"}
+    } <= {"LineString", "MultiLineString"}
+    assert {
+        feature["properties"]["hydrologic_order"] for feature in waterways["features"]
+    } == set(range(5, 12))
+    assert {
+        feature["properties"]["waterway"] for feature in waterways["features"]
+        if feature["properties"]["hydrologic_order"] >= 9
+    } == {"river"}
+    assert {
+        feature["properties"]["waterway"] for feature in waterways["features"]
+        if feature["properties"]["hydrologic_order"] < 9
+    } == {"stream"}
+    assert {
+        feature["properties"]["source"] for feature in waterways["features"]
+    } == {"Rios filtrados y suavizados (capa local)"}
+
+
+def test_waterway_labels_overlay_previous_named_layer():
+    labels = load_json("data/processed/waterway_labels.geojson")
+    assert len(labels["features"]) == 78
+    assert {feature["geometry"]["type"] for feature in labels["features"]} == {"Point"}
+    assert {
+        feature["properties"]["source"] for feature in labels["features"]
+    } == {"OpenStreetMap (capa anterior)"}
+    assert {
+        feature["properties"]["category"] for feature in labels["features"]
+    } >= {"rio_principal", "cauce", "estero"}
+    names = {feature["properties"]["name"] for feature in labels["features"]}
+    assert "Río Napo" in names
+    assert "Estero Paushi" in names
 
 
 def test_html_embeds_map_data():
@@ -47,6 +79,11 @@ def test_html_embeds_map_data():
     assert "const DATA =" in html
     assert "Quebradas" in html
     assert "CENTRO URBANO HUATICOCHA" in html
+    assert "COMUNA JUMANDI" in html
+    assert "Rios filtrados y suavizados" in html
+    assert "waterwayLabels" in html
+    assert "Nombres hidrograficos" in html
+    assert "OpenStreetMap (capa anterior)" in html
     # Standard A0 poster format markers
     assert "page-container" in html
     assert "map-title-banner" in html

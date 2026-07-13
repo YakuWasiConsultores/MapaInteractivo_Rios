@@ -19,6 +19,7 @@ from pathlib import Path
 DATASETS = {
     "communities": "communities.geojson",
     "waterways": "waterways.geojson",
+    "waterwayLabels": "waterway_labels.geojson",
     "possibleCommunities": "possible_communities.geojson",
     "corridorPolygon": "corridor_polygon.geojson",
     "kbaSumaco": "kba_sumaco.geojson",
@@ -37,6 +38,22 @@ def load_json(path: Path) -> object:
 def js_data_var(data_dir: Path) -> str:
     data = {name: load_json(data_dir / filename) for name, filename in DATASETS.items()}
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+
+
+def projection_settings(data_dir: Path) -> tuple[str, str, str]:
+    metadata = load_json(data_dir / "metadata.json")
+    epsg = int(metadata.get("utm_epsg") or 32717)
+    zone = str(epsg % 100)
+    label = str(metadata.get("utm_label") or f"ZONA {zone} SUR")
+    return str(epsg), zone, label
+
+
+def waterway_source_label(data_dir: Path) -> str:
+    metadata = load_json(data_dir / "metadata.json")
+    for export in metadata.get("exports", []):
+        if export.get("name") == "waterways":
+            return str(export.get("source_label") or export.get("source") or "Capa local")
+    return "OpenStreetMap (provisional)"
 
 
 def community_rows(data_dir: Path) -> list[tuple[int, str, float]]:
@@ -71,9 +88,21 @@ def build_tables_html(rows: list[tuple[int, str, float]]) -> str:
     return "".join(parts)
 
 
-def html_template(data_json: str, tables_html: str) -> str:
+def html_template(
+    data_json: str,
+    tables_html: str,
+    utm_epsg: str,
+    utm_zone: str,
+    utm_label: str,
+    waterway_source: str,
+) -> str:
     return (
-        TEMPLATE.replace("__TABLES__", tables_html).replace("__DATA_JSON__", data_json)
+        TEMPLATE.replace("__TABLES__", tables_html)
+        .replace("__DATA_JSON__", data_json)
+        .replace("__UTM_EPSG__", utm_epsg)
+        .replace("__UTM_ZONE__", utm_zone)
+        .replace("__UTM_LABEL__", utm_label)
+        .replace("__WATERWAY_SOURCE__", waterway_source)
     )
 
 
@@ -216,6 +245,17 @@ TEMPLATE = r"""<!DOCTYPE html>
             white-space: nowrap; text-shadow: 1px 1px 3px #fff, -1px -1px 3px #fff, 1px -1px 3px #fff, -1px 1px 3px #fff;
             background: transparent; border: none;
         }
+        .water-label {
+            color: #063f6f; font-size: 17px; font-style: italic; font-weight: bold;
+            white-space: nowrap; text-shadow: 1px 1px 4px #fff, -1px -1px 4px #fff, 1px -1px 4px #fff, -1px 1px 4px #fff;
+            background: transparent; border: none;
+        }
+        .water-label-rio-principal { color: #064b80; font-size: 20px; }
+        .water-label-cascada { color: #0f766e; }
+        .symb-text {
+            width: 90px; flex-shrink: 0; color: #063f6f; font-size: 2.1rem;
+            font-style: italic; font-weight: bold; text-align: center;
+        }
         .label-inner-top { position: absolute; top: 3px; left: 0; transform: translateX(-50%); color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
         .label-inner-bottom { position: absolute; bottom: 3px; left: 0; transform: translateX(-50%); color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
         .label-inner-left { position: absolute; top: 0; left: 3px; transform: translateY(-50%) rotate(-90deg); transform-origin: left center; color: #000; font-size: 14px; font-weight: bold; white-space: nowrap; }
@@ -252,6 +292,7 @@ TEMPLATE += r"""<body>
                 <div class="symb-group-title">Hidrografia</div>
                 <div class="symbology-item" data-layer="rivers" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-line river"></div> Rios principales</div>
                 <div class="symbology-item" data-layer="streams" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-line stream"></div> Quebradas y esteros</div>
+                <div class="symbology-item" data-layer="waterLabels" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-text">Aa</div> Nombres hidrograficos</div>
 
                 <div class="symb-group-title">Territorios</div>
                 <div class="symbology-item" data-layer="communities" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #a0522d;"></div> Comunidades del corredor</div>
@@ -267,9 +308,9 @@ TEMPLATE += r"""<body>
                 <div class="yacuwarmi-title">FUNDACION AMAZONICA YACUWARMI</div>
                 <div class="yacuwarmi-grid">
                     <div class="yg-cell">Contiene:<br>Red hidrica (rios y quebradas) del corredor de conectividad comunitaria, herencia ancestral y bioeconomia.</div>
-                    <div class="yg-cell" style="text-align: center;"><br>SISTEMA DE COORDENADAS<br><br>PROYECCION UNIVERSAL TRANSVERSA DE MERCATOR<br>ELIPSOIDE, DATUM: WGS84, ZONA 17 SUR</div>
-                    <div class="yg-cell">Fuente:<br>Cartografia base esc: 1:100 000 IGM. MAATE (2024). Hidrografia: OpenStreetMap (provisional).</div>
-                    <div class="yg-cell" style="text-align: center;">Fecha:<br>27 / 06 / 2026<br><br>Elaborado por: Ing Tanya Camalle Analista SIG<br>Ing Kevin Castro</div>
+                    <div class="yg-cell" style="text-align: center;"><br>SISTEMA DE COORDENADAS<br><br>PROYECCION UNIVERSAL TRANSVERSA DE MERCATOR<br>ELIPSOIDE, DATUM: WGS84, __UTM_LABEL__</div>
+                    <div class="yg-cell">Fuente:<br>Cartografia base esc: 1:100 000 IGM. MAATE (2024). Hidrografia: __WATERWAY_SOURCE__.</div>
+                    <div class="yg-cell" style="text-align: center;">Fecha:<br>27 / 06 / 2026<br><br>Elaborado por: Ing Tanya Camalle Analista SIG<br>Ing Kevin Castro<br>Ing. Arnoldd Hernández</div>
                 </div>
             </div>
 
@@ -321,7 +362,7 @@ TEMPLATE += r"""
             zoomSnap: 0, zoomDelta: 0.1
         });
 
-        proj4.defs("EPSG:32717", "+proj=utm +zone=17 +south +datum=WGS84 +units=m +no_defs");
+        proj4.defs("EPSG:__UTM_EPSG__", "+proj=utm +zone=__UTM_ZONE__ +south +datum=WGS84 +units=m +no_defs");
 
         // ---- Polygon label helper (protected areas) ----
         function labelPolygons(feature, layer) {
@@ -397,9 +438,19 @@ TEMPLATE += r"""
         function streamStyle() { return { color: '#4ba3d8', weight: 1.4, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }; }
         function waterPopup(f) {
             var p = f.properties;
-            var label = p.waterway === 'river' ? 'Rio' : (p.waterway === 'canal' ? 'Canal' : (p.waterway === 'stream' ? 'Quebrada/estero' : 'Drenaje'));
-            var name = isNamed(p) ? normName(p.name) : 'Curso de agua sin nombre';
-            return '<b>' + name + '</b><br>Tipo: ' + label + '<br>Fuente: ' + (p.source || 'OSM');
+            var label = p.waterway === 'river' ? 'Rio principal' : (p.waterway === 'canal' ? 'Canal' : (p.waterway === 'stream' ? 'Quebrada/estero' : 'Drenaje'));
+            var name = isNamed(p) ? normName(p.name) : label;
+            var order = p.hydrologic_order || p.ORDER;
+            var orderText = order ? '<br>Orden hidrologico: ' + order : '';
+            return '<b>' + name + '</b><br>Tipo: ' + label + orderText + '<br>Fuente: ' + (p.source || 'OSM');
+        }
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>"']/g, function(ch) {
+                return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[ch];
+            });
+        }
+        function waterLabelClass(category) {
+            return 'water-label water-label-' + String(category || 'cauce').replace(/_/g, '-');
         }
 
         var riverLabels = [];
@@ -426,6 +477,27 @@ TEMPLATE += r"""
             onEachFeature: function(f, l) { l.bindPopup(waterPopup(f)); }
         }).addTo(map);
 
+        var waterLabelsLayer = L.layerGroup().addTo(map);
+        (DATA.waterwayLabels.features || []).forEach(function(feature) {
+            var p = feature.properties || {};
+            var coords = feature.geometry && feature.geometry.coordinates;
+            var name = normName(p.name);
+            if (!coords || !name) return;
+            var marker = L.marker([coords[1], coords[0]], {
+                icon: L.divIcon({
+                    className: 'water-label-icon',
+                    html: '<div class="' + waterLabelClass(p.category) + '">' + escapeHtml(name) + '</div>',
+                    iconSize: null
+                }),
+                interactive: false
+            });
+            marker.bindTooltip(
+                '<b>' + escapeHtml(name) + '</b><br>' + escapeHtml(p.label_type || 'Cauce') + '<br>' + escapeHtml(p.source || ''),
+                { direction: 'top' }
+            );
+            waterLabelsLayer.addLayer(marker);
+        });
+
         // ---- Static park label ----
         var parkLabel = L.marker([-0.55, -77.65], {
             icon: L.divIcon({ className: 'park-label', html: 'Parque Nacional<br>Sumaco-Napo Galeras', iconSize: [300, 80] }),
@@ -436,6 +508,7 @@ TEMPLATE += r"""
         var mapLayers = {
             'rivers':      { layer: riverLayer, extras: riverLabels },
             'streams':     { layer: streamLayer, extras: [] },
+            'waterLabels': { layer: waterLabelsLayer, extras: [] },
             'communities': { layer: communitiesLayer, extras: commLabelMarkers },
             'posibles':    { layer: posiblesLayer, extras: [] },
             'kba':         { layer: kbaLayer, extras: [] },
@@ -465,28 +538,28 @@ TEMPLATE += r"""
             var b = map.getBounds();
             var step = 10000;
             var gridFeatures = [];
-            var swUTM = proj4("EPSG:4326", "EPSG:32717", [b.getWest(), b.getSouth()]);
-            var neUTM = proj4("EPSG:4326", "EPSG:32717", [b.getEast(), b.getNorth()]);
+            var swUTM = proj4("EPSG:4326", "EPSG:__UTM_EPSG__", [b.getWest(), b.getSouth()]);
+            var neUTM = proj4("EPSG:4326", "EPSG:__UTM_EPSG__", [b.getEast(), b.getNorth()]);
             var startX = Math.floor(swUTM[0] / step) * step;
             var endX = Math.ceil(neUTM[0] / step) * step;
             var startY = Math.floor(swUTM[1] / step) * step;
             var endY = Math.ceil(neUTM[1] / step) * step;
             for (var x = startX; x <= endX; x += step) {
-                var bottom = proj4("EPSG:32717", "EPSG:4326", [x, startY - step]);
-                var top = proj4("EPSG:32717", "EPSG:4326", [x, endY + step]);
+                var bottom = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [x, startY - step]);
+                var top = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [x, endY + step]);
                 gridFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[bottom[0], bottom[1]], [top[0], top[1]]] } });
-                var topEdge = proj4("EPSG:32717", "EPSG:4326", [x, neUTM[1]]);
+                var topEdge = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [x, neUTM[1]]);
                 L.marker([b.getNorth(), topEdge[0]], { icon: L.divIcon({ html: '<div class="label-inner-top">' + x + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
-                var bottomEdge = proj4("EPSG:32717", "EPSG:4326", [x, swUTM[1]]);
+                var bottomEdge = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [x, swUTM[1]]);
                 L.marker([b.getSouth(), bottomEdge[0]], { icon: L.divIcon({ html: '<div class="label-inner-bottom">' + x + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
             }
             for (var y = startY; y <= endY; y += step) {
-                var left = proj4("EPSG:32717", "EPSG:4326", [startX - step, y]);
-                var right = proj4("EPSG:32717", "EPSG:4326", [endX + step, y]);
+                var left = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [startX - step, y]);
+                var right = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [endX + step, y]);
                 gridFeatures.push({ type: "Feature", geometry: { type: "LineString", coordinates: [[left[0], left[1]], [right[0], right[1]]] } });
-                var leftEdge = proj4("EPSG:32717", "EPSG:4326", [swUTM[0], y]);
+                var leftEdge = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [swUTM[0], y]);
                 L.marker([leftEdge[1], b.getWest()], { icon: L.divIcon({ html: '<div class="label-inner-left">' + y + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
-                var rightEdge = proj4("EPSG:32717", "EPSG:4326", [neUTM[0], y]);
+                var rightEdge = proj4("EPSG:__UTM_EPSG__", "EPSG:4326", [neUTM[0], y]);
                 L.marker([rightEdge[1], b.getEast()], { icon: L.divIcon({ html: '<div class="label-inner-right">' + y + '</div>', iconSize: [0, 0] }), interactive: false }).addTo(map);
             }
             L.geoJSON(gridFeatures, { style: { color: '#000', weight: 1, dashArray: '4, 4', opacity: 0.4 }, interactive: false }).addTo(map);
@@ -517,7 +590,16 @@ def main() -> None:
 
     rows = community_rows(args.data)
     tables_html = build_tables_html(rows)
-    html = html_template(js_data_var(args.data), tables_html)
+    utm_epsg, utm_zone, utm_label = projection_settings(args.data)
+    waterway_source = waterway_source_label(args.data)
+    html = html_template(
+        js_data_var(args.data),
+        tables_html,
+        utm_epsg,
+        utm_zone,
+        utm_label,
+        waterway_source,
+    )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(html, encoding="utf-8")

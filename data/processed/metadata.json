@@ -1,19 +1,48 @@
 {
-  "generated_at": "2026-06-28T05:00:09.153128+00:00",
+  "generated_at": "2026-07-13T15:13:11.713768+00:00",
   "source_root": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8",
   "exports": [
     {
       "name": "communities",
       "path": "data/processed/communities.geojson",
-      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8/SHP/Comunidades_del_corredor-25.shp",
-      "layer": "Comunidades_del_corredor-25",
-      "feature_count": 25,
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/CORREDOR 5.gpkg",
+      "layer": "unin",
+      "feature_count": 27,
       "bounds": [
-        -77.90081958808592,
-        -0.883627111577282,
-        -77.21945145731087,
-        -0.370263846999776
-      ]
+        -77.90081958808595,
+        -0.88362711154818,
+        -77.14304216278778,
+        -0.346223059109352
+      ],
+      "source_epsg": 32718,
+      "raw_feature_count": 28,
+      "skipped_slivers": 1
+    },
+    {
+      "name": "waterways",
+      "path": "data/processed/waterways.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/Rios_filtrado_suavizado_optimizado.gpkg",
+      "source_label": "Rios filtrados y suavizados (capa local revisada)",
+      "layer": "Rios_filtrado_suavizado_optimizado",
+      "feature_count": 7,
+      "bounds": [
+        -77.97562084182867,
+        -0.943999204813947,
+        -77.11872073382749,
+        -0.273209877251794
+      ],
+      "source_epsg": 32718,
+      "hydrologic_orders": {
+        "11": 1,
+        "5": 1,
+        "6": 1,
+        "9": 1,
+        "10": 1,
+        "7": 1,
+        "8": 1
+      },
+      "main_river_min_order": 9,
+      "skipped_features": 0
     },
     {
       "name": "possible_communities",
@@ -26,7 +55,8 @@
         -0.816437552558108,
         -77.31412789775732,
         -0.462384586366815
-      ]
+      ],
+      "source_epsg": 32717
     },
     {
       "name": "corridor_polygon",
@@ -39,7 +69,8 @@
         -0.883627111577173,
         -77.20053857344583,
         -0.346223055457325
-      ]
+      ],
+      "source_epsg": 32717
     },
     {
       "name": "kba_sumaco",
@@ -52,7 +83,8 @@
         -0.950273812786186,
         -77.2077941888507,
         -0.049438470309096
-      ]
+      ],
+      "source_epsg": 32717
     },
     {
       "name": "kba_huacamayos",
@@ -65,7 +97,8 @@
         -1.029912793640454,
         -77.80105590840338,
         -0.585011807548823
-      ]
+      ],
+      "source_epsg": 32717
     },
     {
       "name": "nororiental_corridor",
@@ -78,7 +111,8 @@
         -1.063462,
         -77.17178,
         0.321486
-      ]
+      ],
+      "source_epsg": 32718
     },
     {
       "name": "snap",
@@ -91,7 +125,8 @@
         -1.35,
         -77.1130503360602,
         0.45
-      ]
+      ],
+      "source_epsg": 32717
     },
     {
       "name": "provinces",
@@ -104,7 +139,8 @@
         -1.35,
         -76.8,
         0.45
-      ]
+      ],
+      "source_epsg": 32717
     },
     {
       "name": "napo",
@@ -117,13 +153,16 @@
         -1.248816249669192,
         -77.02282762463238,
         0.034175760456086
-      ]
+      ],
+      "source_epsg": 32717
     }
   ],
   "map_bounds": [
-    -77.90081958808592,
-    -0.883627111577282,
-    -77.21945145731087,
-    -0.370263846999776
-  ]
+    -77.90081958808595,
+    -0.88362711154818,
+    -77.14304216278778,
+    -0.346223059109352
+  ],
+  "utm_epsg": 32718,
+  "utm_label": "ZONA 18 SUR"
 }

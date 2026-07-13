@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,12 @@ from osgeo import ogr, osr
 DEFAULT_SOURCE = Path(
     "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8"
 )
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LOCAL_COMMUNITIES_GPKG = REPO_ROOT / "CORREDOR 5.gpkg"
+LOCAL_WATERWAYS_GPKG = REPO_ROOT / "Rios_filtrado_suavizado_optimizado.gpkg"
+LOCAL_WATERWAYS_LAYER = "Rios_filtrado_suavizado_optimizado"
+SLIVER_AREA_M2 = 1.0
+MAIN_RIVER_MIN_ORDER = 9
 
 
 # Study-area clip box (WGS84: west, south, east, north).
@@ -86,6 +94,35 @@ LAYER_SPECS = [
     },
 ]
 
+COMMUNITY_NAME_FIELDS = [
+    "NAME FIN_7",
+    "NAME FIN_6",
+    "NAME FIN_5",
+    "NAME FIN_4",
+    "NAME FIN_1",
+    "NAME FIN_2",
+    "NAME FIN_3",
+    "NAME FINAL",
+    "NOMBRE_3_6",
+    "NOMBRE_3_5",
+    "NOMBRE_3_4",
+    "NOMBRE_3_3",
+    "NOMBRE_3_2",
+    "NOMBRE_3_1",
+    "NOMBRE_3",
+    "NOMBRE_2_9",
+    "NOMBRE_2_8",
+    "NOMBRE_2_7",
+    "NOMBRE_2_6",
+    "NOMBRE_2_5",
+    "NOMBRE_2_4",
+    "NOMBRE_2_3",
+    "NOMBRE_2_2",
+    "Nombre_2_1",
+    "Nombre_2",
+    "pre_nombre",
+]
+
 
 def traditional_srs(srs: osr.SpatialReference | None) -> osr.SpatialReference | None:
     if srs is None:
@@ -154,6 +191,224 @@ def properties_for(feature: ogr.Feature) -> dict[str, Any]:
     return props
 
 
+def normalize_community_name(value: str) -> str:
+    ascii_value = (
+        unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    )
+    ascii_value = ascii_value.upper()
+    ascii_value = ascii_value.replace("SANA JOSE", "SAN JOSE")
+    ascii_value = re.sub(r"\s+", " ", ascii_value).strip()
+    return ascii_value
+
+
+def load_existing_community_map(
+    output_dir: Path,
+) -> tuple[dict[str, int], dict[str, str]]:
+    path = output_dir / "communities.geojson"
+    if not path.exists():
+        return {}, {}
+    collection = json.loads(path.read_text(encoding="utf-8"))
+    ids_by_name: dict[str, int] = {}
+    names_by_name: dict[str, str] = {}
+    for feature in collection.get("features", []):
+        props = feature.get("properties", {})
+        name = props.get("NAME FINAL")
+        num_id = props.get("NUM_ID")
+        if not name or num_id in (None, ""):
+            continue
+        normalized = normalize_community_name(str(name))
+        ids_by_name[normalized] = int(num_id)
+        names_by_name[normalized] = str(name)
+    return ids_by_name, names_by_name
+
+
+def feature_community_name(feature: ogr.Feature, known_names: dict[str, str]) -> str | None:
+    for field in COMMUNITY_NAME_FIELDS:
+        try:
+            value = feature.GetField(field)
+        except KeyError:
+            continue
+        if value in (None, ""):
+            continue
+        cleaned = str(value).strip()
+        normalized = normalize_community_name(cleaned)
+        if normalized in known_names:
+            return known_names[normalized]
+        return cleaned
+    return None
+
+
+def source_epsg_code(srs: osr.SpatialReference | None) -> int | None:
+    if srs is None:
+        return None
+    authority = srs.GetAuthorityCode(None)
+    if authority is None:
+        return None
+    try:
+        return int(authority)
+    except ValueError:
+        return None
+
+
+def export_local_communities(output_dir: Path, simplify: float) -> dict[str, Any]:
+    dataset = ogr.Open(str(LOCAL_COMMUNITIES_GPKG), 0)
+    if dataset is None:
+        raise RuntimeError(f"No se pudo abrir {LOCAL_COMMUNITIES_GPKG}")
+    layer = dataset.GetLayer(0)
+    if layer is None:
+        raise RuntimeError(f"No se encontro una capa util en {LOCAL_COMMUNITIES_GPKG}")
+    layer_name = layer.GetName()
+
+    src_srs = traditional_srs(layer.GetSpatialRef())
+    dst_srs = wgs84_srs()
+    transform = None
+    if src_srs is not None and not src_srs.IsSame(dst_srs):
+        transform = osr.CoordinateTransformation(src_srs, dst_srs)
+
+    existing_ids, existing_names = load_existing_community_map(output_dir)
+    next_display_id = max(existing_ids.values(), default=0) + 1
+    grouped: dict[str, dict[str, Any]] = {}
+    raw_count = 0
+    skipped_slivers = 0
+
+    for feature in layer:
+        raw_count += 1
+        name = feature_community_name(feature, existing_names)
+        if not name:
+            continue
+        geometry = feature.GetGeometryRef()
+        if geometry is None:
+            continue
+        merged = geometry.Clone()
+        merged.FlattenTo2D()
+        if merged.IsEmpty():
+            continue
+        if merged.GetArea() <= SLIVER_AREA_M2:
+            skipped_slivers += 1
+            continue
+
+        normalized = normalize_community_name(name)
+        display_name = existing_names.get(normalized, name)
+        entry = grouped.get(normalized)
+        if entry is None:
+            grouped[normalized] = {"name": display_name, "geometry": merged}
+        else:
+            unioned = entry["geometry"].Union(merged)
+            polygonal = polygons_only(unioned) if unioned is not None else None
+            entry["geometry"] = polygonal if polygonal is not None else merged
+
+    features = []
+    bounds: list[float] | None = None
+    for normalized, entry in grouped.items():
+        display_id = existing_ids.get(normalized)
+        if display_id is None:
+            display_id = next_display_id
+            next_display_id += 1
+        geom_json = geometry_to_json(entry["geometry"], transform, simplify)
+        if geom_json is None:
+            continue
+        area_ha = round(entry["geometry"].GetArea() / 10000, 2)
+        props = {
+            "NUM_ID": display_id,
+            "NAME FINAL": entry["name"],
+            "Ha": area_ha,
+            "display_id": display_id,
+            "display_name": entry["name"],
+            "area_ha": area_ha,
+        }
+        features.append({"type": "Feature", "properties": props, "geometry": geom_json})
+        bounds = expand_bounds(bounds, geom_json)
+
+    features.sort(key=lambda f: int(f["properties"]["NUM_ID"]))
+    collection = {"type": "FeatureCollection", "features": features}
+    output_path = output_dir / "communities.geojson"
+    output_path.write_text(
+        json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    dataset = None
+    return {
+        "name": "communities",
+        "path": str(output_path),
+        "source": str(LOCAL_COMMUNITIES_GPKG),
+        "layer": layer_name,
+        "feature_count": len(features),
+        "bounds": bounds,
+        "source_epsg": source_epsg_code(src_srs),
+        "raw_feature_count": raw_count,
+        "skipped_slivers": skipped_slivers,
+    }
+
+
+def export_local_waterways(output_dir: Path) -> dict[str, Any]:
+    """Export the reviewed local hydrography and retain its stream-order hierarchy."""
+    dataset = ogr.Open(str(LOCAL_WATERWAYS_GPKG), 0)
+    if dataset is None:
+        raise RuntimeError(f"No se pudo abrir {LOCAL_WATERWAYS_GPKG}")
+    layer = dataset.GetLayerByName(LOCAL_WATERWAYS_LAYER) or dataset.GetLayer(0)
+    if layer is None:
+        raise RuntimeError(f"No se encontro una capa util en {LOCAL_WATERWAYS_GPKG}")
+    layer_name = layer.GetName()
+
+    src_srs = traditional_srs(layer.GetSpatialRef())
+    dst_srs = wgs84_srs()
+    transform = None
+    if src_srs is not None and not src_srs.IsSame(dst_srs):
+        transform = osr.CoordinateTransformation(src_srs, dst_srs)
+
+    features = []
+    bounds: list[float] | None = None
+    orders: dict[int, int] = {}
+    skipped = 0
+    for feature in layer:
+        geometry = feature.GetGeometryRef()
+        if geometry is None or geometry.IsEmpty():
+            skipped += 1
+            continue
+        order_value = feature.GetField("ORDER")
+        if order_value in (None, ""):
+            skipped += 1
+            continue
+        order = int(order_value)
+        geom_json = geometry_to_json(geometry, transform, 0)
+        if geom_json is None:
+            skipped += 1
+            continue
+        waterway = "river" if order >= MAIN_RIVER_MIN_ORDER else "stream"
+        properties = {
+            "hydrologic_order": order,
+            "waterway": waterway,
+            "source": "Rios filtrados y suavizados (capa local)",
+        }
+        features.append(
+            {"type": "Feature", "properties": properties, "geometry": geom_json}
+        )
+        orders[order] = orders.get(order, 0) + 1
+        bounds = expand_bounds(bounds, geom_json)
+
+    features.sort(key=lambda feature: int(feature["properties"]["hydrologic_order"]))
+    collection = {"type": "FeatureCollection", "features": features}
+    output_path = output_dir / "waterways.geojson"
+    output_path.write_text(
+        json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    dataset = None
+    return {
+        "name": "waterways",
+        "path": str(output_path),
+        "source": str(LOCAL_WATERWAYS_GPKG),
+        "source_label": "Rios filtrados y suavizados (capa local revisada)",
+        "layer": layer_name,
+        "feature_count": len(features),
+        "bounds": bounds,
+        "source_epsg": source_epsg_code(src_srs),
+        "hydrologic_orders": orders,
+        "main_river_min_order": MAIN_RIVER_MIN_ORDER,
+        "skipped_features": skipped,
+    }
+
+
 def geometry_to_json(
     geometry: ogr.Geometry,
     transform: osr.CoordinateTransformation | None,
@@ -209,6 +464,9 @@ def expand_bounds(bounds: list[float] | None, geom_json: dict[str, Any]) -> list
 
 
 def export_layer(source_root: Path, output_dir: Path, spec: dict[str, Any]) -> dict[str, Any]:
+    if spec["name"] == "communities" and LOCAL_COMMUNITIES_GPKG.exists():
+        return export_local_communities(output_dir, float(spec.get("simplify", 0)))
+
     source = source_root / spec["source"]
     dataset = ogr.Open(str(source), 0)
     if dataset is None:
@@ -264,6 +522,7 @@ def export_layer(source_root: Path, output_dir: Path, spec: dict[str, Any]) -> d
         "layer": spec["layer"],
         "feature_count": len(features),
         "bounds": bounds,
+        "source_epsg": source_epsg_code(src_srs),
     }
 
 
@@ -275,18 +534,25 @@ def main() -> None:
 
     args.output.mkdir(parents=True, exist_ok=True)
     exports = [export_layer(args.source, args.output, spec) for spec in LAYER_SPECS]
+    if LOCAL_WATERWAYS_GPKG.exists():
+        exports.insert(1, export_local_waterways(args.output))
     community_export = next(item for item in exports if item["name"] == "communities")
-    if community_export["feature_count"] != 25:
+    if community_export["feature_count"] < 25:
         raise RuntimeError(
-            "La capa de comunidades debe contener 25 entidades; "
+            "La capa de comunidades debe contener al menos 25 entidades; "
             f"se obtuvieron {community_export['feature_count']}"
         )
+
+    utm_epsg = int(community_export.get("source_epsg") or 32717)
+    utm_label = f"ZONA {utm_epsg % 100} SUR"
 
     metadata = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_root": str(args.source),
         "exports": exports,
         "map_bounds": community_export["bounds"],
+        "utm_epsg": utm_epsg,
+        "utm_label": utm_label,
     }
     (args.output / "metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
