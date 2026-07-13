@@ -96,6 +96,7 @@ def test_html_embeds_map_data():
     assert "waterwayLabels" in html
     assert "corridorMask" in html
     assert "Mascara corredor" in html
+    assert "className: 'mask-label'" not in html
     assert "Nombres hidrograficos" in html
     assert "OpenStreetMap (capa anterior)" in html
     # Standard poster format markers and print-size controls
@@ -107,6 +108,9 @@ def test_html_embeds_map_data():
     assert "A0 (1189 x 841 mm)" in html
     assert "A4 (297 x 210 mm)" in html
     assert "function setPaperSize(name)" in html
-    # Must be a static poster: no interactive tile basemap, no panning
+    # No interactive tile basemap or zoom; the complete HTML poster can be dragged.
     assert "tileLayer" not in html
     assert "dragging: false" in html
+    assert "scrollWheelZoom: false" in html
+    assert "function enablePageDragging()" in html
+    assert "window.scrollTo(drag.scrollX - deltaX, drag.scrollY - deltaY)" in html

@@ -139,6 +139,11 @@ TEMPLATE = r"""<!DOCTYPE html>
             padding: 20px;
             box-sizing: border-box;
             border: 2px solid transparent;
+            cursor: grab;
+        }
+        html.html-dragging, html.html-dragging * {
+            cursor: grabbing !important;
+            user-select: none !important;
         }
         @media print {
             html, body {
@@ -271,13 +276,6 @@ TEMPLATE = r"""<!DOCTYPE html>
             font-weight: bold; font-size: 24px; box-shadow: 2px 2px 5px rgba(0,0,0,0.6);
         }
         .park-label { color: #111; font-size: 25px; font-weight: bold; text-align: center; text-shadow: 2px 2px 5px #fff, -2px -2px 5px #fff; }
-        .mask-label {
-            color: #111827; font-size: 24px; font-weight: bold; text-align: center;
-            text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
-            background: rgba(244, 211, 94, 0.9); border: 3px solid #111827;
-            border-radius: 8px; padding: 6px 14px;
-            box-shadow: 2px 2px 6px rgba(0,0,0,0.35);
-        }
         .snap-label { color: #111; font-size: 20px; font-weight: bold; text-align: center; text-shadow: 1px 1px 3px #fff, -1px -1px 3px #fff; white-space: nowrap; }
         .river-label {
             color: #0a4f87; font-size: 19px; font-style: italic; font-weight: bold;
@@ -434,6 +432,57 @@ TEMPLATE += r"""
         }
 
         setPaperSize(new URLSearchParams(window.location.search).get('paper') || 'A0');
+
+        // Drag anywhere on the poster to pan the complete HTML document.
+        function enablePageDragging() {
+            const ignored = '.print-controls, button, select, input, textarea, a, label, .symbology-item, .leaflet-popup, .leaflet-tooltip';
+            let drag = null;
+            let suppressClick = false;
+
+            function finishDrag(event) {
+                if (!drag || (event && event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+                if (drag.moved) {
+                    suppressClick = true;
+                    setTimeout(function() { suppressClick = false; }, 0);
+                }
+                drag = null;
+                document.documentElement.classList.remove('html-dragging');
+            }
+
+            document.addEventListener('pointerdown', function(event) {
+                if (event.button !== 0 || event.target.closest(ignored)) return;
+                drag = {
+                    pointerId: event.pointerId,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    scrollX: window.scrollX,
+                    scrollY: window.scrollY,
+                    moved: false
+                };
+                document.documentElement.classList.add('html-dragging');
+                event.preventDefault();
+            }, true);
+
+            document.addEventListener('pointermove', function(event) {
+                if (!drag || event.pointerId !== drag.pointerId) return;
+                const deltaX = event.clientX - drag.startX;
+                const deltaY = event.clientY - drag.startY;
+                if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) drag.moved = true;
+                window.scrollTo(drag.scrollX - deltaX, drag.scrollY - deltaY);
+                event.preventDefault();
+            }, true);
+
+            document.addEventListener('pointerup', finishDrag, true);
+            document.addEventListener('pointercancel', finishDrag, true);
+            window.addEventListener('blur', function() { finishDrag(); });
+            document.addEventListener('click', function(event) {
+                if (!suppressClick) return;
+                event.preventDefault();
+                event.stopPropagation();
+            }, true);
+        }
+
+        enablePageDragging();
 
         // Normalize river names (fix mixed-case encoding like "RIo" / "Rio")
         function normName(n) {
@@ -606,11 +655,6 @@ TEMPLATE += r"""
         riverLayer.bringToFront();
         streamLayer.bringToFront();
 
-        var corridorMaskLabel = L.marker(corridorMaskLayer.getBounds().getCenter(), {
-            icon: L.divIcon({ className: 'mask-label', html: 'Mascara corredor', iconSize: null, iconAnchor: [95, 18] }),
-            interactive: false
-        }).addTo(map);
-
         // ---- Static park label ----
         var parkLabel = L.marker([-0.55, -77.65], {
             icon: L.divIcon({ className: 'park-label', html: 'Parque Nacional<br>Sumaco-Napo Galeras', iconSize: [300, 80] }),
@@ -626,7 +670,7 @@ TEMPLATE += r"""
             'posibles':    { layer: posiblesLayer, extras: [] },
             'kba':         { layer: kbaLayer, extras: [] },
             'ecu25':       { layer: ecu25Layer, extras: ecu25Labels },
-            'corridorMask': { layer: corridorMaskLayer, extras: [corridorMaskLabel] },
+            'corridorMask': { layer: corridorMaskLayer, extras: [] },
             'corredorNor': { layer: corredorNorLayer, extras: [] },
             'napo':        { layer: napoLayer, extras: [] },
             'snap':        { layer: snapLayer, extras: snapLabels }
