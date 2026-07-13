@@ -32,8 +32,9 @@ El mapa usa el formato estándar institucional Yacu Warmi: póster **A0 horizont
 ubicación, simbología conmutable, recuadro institucional, escala y logos) y
 columna derecha (banner de título, mapa con grilla UTM y tabla de
 comunidades). La hidrografía (ríos y quebradas) se dibuja en azul sobre las
-capas territoriales. El mapa es estático: sin tiles de fondo, sin zoom ni
-desplazamiento, fijado a escala 1:100000.
+capas territoriales. El mapa no usa tiles de fondo ni permite zoom. El póster
+HTML completo se puede desplazar arrastrándolo con el mouse, incluso al iniciar
+el gesto sobre el mapa; conserva la escala 1:100000.
 
 ## Publicación en GitHub Pages
 
