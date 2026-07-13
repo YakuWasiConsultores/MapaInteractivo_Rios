@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-13T19:47:45.648605+00:00",
+  "generated_at": "2026-07-13T20:33:07.964951+00:00",
   "source_root": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8",
   "exports": [
     {
@@ -71,6 +71,21 @@
         -0.346223055457325
       ],
       "source_epsg": 32717
+    },
+    {
+      "name": "corridor_mask",
+      "path": "data/processed/corridor_mask.geojson",
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/data/source/mascara corredor.gpkg",
+      "layer": "corredor",
+      "feature_count": 1,
+      "bounds": [
+        -77.90130173074824,
+        -0.883627111577173,
+        -77.20053857344583,
+        -0.346223055457325
+      ],
+      "source_epsg": 32717,
+      "skipped_features": 0
     },
     {
       "name": "kba_sumaco",

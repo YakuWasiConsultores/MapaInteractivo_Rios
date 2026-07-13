@@ -53,6 +53,19 @@ Nombres nuevos o relevantes:
 - `COMUNIDAD SAN JOSE DE PAYAMINO` se normalizo solo en capitalizacion desde
   el valor fuente `COMUNIDAD SANa JOSE DE PAYAMINO`.
 
+## Actualizacion mascara corredor - 2026-07-13
+
+Se agrego `data/source/mascara corredor.gpkg` como capa local adicional. El
+GeoPackage contiene una capa `corredor` con 1 multipoligono en EPSG:32717,
+campos `Id` y `area`, y un area fuente de aproximadamente 110,495.91 ha.
+
+Uso incorporado:
+
+- Se exporta como `data/processed/corridor_mask.geojson`.
+- Se dibuja en el HTML con relleno amarillo translúcido y borde oscuro grueso
+  para que sea visible aunque se solape con el polígono base del corredor.
+- Queda disponible en la simbologia como `Mascara corredor`.
+
 ## Inventario de archivos
 
 | Tipo | Archivo/directorio | Observacion |

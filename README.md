@@ -100,6 +100,9 @@ la construcción del mapa.
   capa como fuente prioritaria. El snapshot actual queda en 26 polígonos
   visibles con IDs reales de la capa, incluyendo `RESERVA BIOLOGICA RÍO BIGAL`
   y `RESERVA NARUPA`. `data/source/CORREDOR 5.gpkg` queda como respaldo local.
+- **Máscara del corredor:** si existe `data/source/mascara corredor.gpkg`, se
+  exporta como `corridor_mask.geojson` y se dibuja con relleno amarillo
+  translúcido y borde oscuro para distinguirla del polígono base del corredor.
 - **Hidrografía:** si existe
   `data/source/Rios_filtrado_suavizado_optimizado.gpkg`, se usa
   como fuente prioritaria. La capa tiene siete trazados jerarquizados (`ORDER`

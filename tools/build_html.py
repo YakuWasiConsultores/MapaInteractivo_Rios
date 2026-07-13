@@ -22,6 +22,7 @@ DATASETS = {
     "waterwayLabels": "waterway_labels.geojson",
     "possibleCommunities": "possible_communities.geojson",
     "corridorPolygon": "corridor_polygon.geojson",
+    "corridorMask": "corridor_mask.geojson",
     "kbaSumaco": "kba_sumaco.geojson",
     "kbaHuacamayos": "kba_huacamayos.geojson",
     "nororientalCorridor": "nororiental_corridor.geojson",
@@ -239,6 +240,13 @@ TEMPLATE = r"""<!DOCTYPE html>
             font-weight: bold; font-size: 24px; box-shadow: 2px 2px 5px rgba(0,0,0,0.6);
         }
         .park-label { color: #111; font-size: 25px; font-weight: bold; text-align: center; text-shadow: 2px 2px 5px #fff, -2px -2px 5px #fff; }
+        .mask-label {
+            color: #111827; font-size: 24px; font-weight: bold; text-align: center;
+            text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+            background: rgba(244, 211, 94, 0.9); border: 3px solid #111827;
+            border-radius: 8px; padding: 6px 14px;
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.35);
+        }
         .snap-label { color: #111; font-size: 20px; font-weight: bold; text-align: center; text-shadow: 1px 1px 3px #fff, -1px -1px 3px #fff; white-space: nowrap; }
         .river-label {
             color: #0a4f87; font-size: 19px; font-style: italic; font-weight: bold;
@@ -299,6 +307,7 @@ TEMPLATE += r"""<body>
                 <div class="symbology-item" data-layer="posibles" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #f5b7b1; border-color: transparent;"></div> Posibles comunidades a integrar</div>
                 <div class="symbology-item" data-layer="kba" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color kba-pattern" style="border-color: #e67e22;"></div> KBA Sumaco-Napo Galeras</div>
                 <div class="symbology-item" data-layer="ecu25" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #1e8449;"></div> KBA Huacamayos-San Isidro</div>
+                <div class="symbology-item" data-layer="corridorMask" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: rgba(244, 211, 94, 0.45); border: 4px solid #111827;"></div> Mascara corredor</div>
                 <div class="symbology-item" data-layer="corredorNor" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: transparent; border: 3px dashed #0057b8;"></div> Corredor NorOriental</div>
                 <div class="symbology-item" data-layer="napo" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #fff; border: 1px solid #000;"></div> Napo</div>
                 <div class="symbology-item" data-layer="snap" onclick="toggleLayer(this)"><div class="symb-check checked">&#10004;</div><div class="symb-color" style="background: #a9dfbf;"></div> SNAP</div>
@@ -402,6 +411,18 @@ TEMPLATE += r"""
             style: { color: '#0057b8', weight: 5, dashArray: '12, 10', fillOpacity: 0 }
         }).addTo(map);
 
+        var corridorMaskLayer = L.geoJSON(DATA.corridorMask, {
+            style: {
+                color: '#111827',
+                weight: 9,
+                fillColor: '#f4d35e',
+                fillOpacity: 0.22,
+                opacity: 1,
+                dashArray: '18, 8'
+            },
+            interactive: false
+        }).addTo(map);
+
         var posiblesLayer = L.geoJSON(DATA.possibleCommunities, {
             style: { color: '#c2738f', weight: 1, fillColor: '#f5b7b1', fillOpacity: 0.85 }
         }).addTo(map);
@@ -498,6 +519,17 @@ TEMPLATE += r"""
             waterLabelsLayer.addLayer(marker);
         });
 
+        // The corridor mask matches the existing corridor geometry, so keep its
+        // outline visibly on top while restoring hydrology above the tint.
+        corridorMaskLayer.bringToFront();
+        riverLayer.bringToFront();
+        streamLayer.bringToFront();
+
+        var corridorMaskLabel = L.marker(corridorMaskLayer.getBounds().getCenter(), {
+            icon: L.divIcon({ className: 'mask-label', html: 'Mascara corredor', iconSize: null, iconAnchor: [95, 18] }),
+            interactive: false
+        }).addTo(map);
+
         // ---- Static park label ----
         var parkLabel = L.marker([-0.55, -77.65], {
             icon: L.divIcon({ className: 'park-label', html: 'Parque Nacional<br>Sumaco-Napo Galeras', iconSize: [300, 80] }),
@@ -513,6 +545,7 @@ TEMPLATE += r"""
             'posibles':    { layer: posiblesLayer, extras: [] },
             'kba':         { layer: kbaLayer, extras: [] },
             'ecu25':       { layer: ecu25Layer, extras: ecu25Labels },
+            'corridorMask': { layer: corridorMaskLayer, extras: [corridorMaskLabel] },
             'corredorNor': { layer: corredorNorLayer, extras: [] },
             'napo':        { layer: napoLayer, extras: [] },
             'snap':        { layer: snapLayer, extras: snapLabels }

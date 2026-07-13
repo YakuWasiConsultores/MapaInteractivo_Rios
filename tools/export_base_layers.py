@@ -28,6 +28,8 @@ def local_source_file(filename: str) -> Path:
 
 LOCAL_COMMUNITIES_FINAL_SHP = local_source_file("CORREDOR_FINAL/CORREDOR_FINAL.shp")
 LOCAL_COMMUNITIES_GPKG = local_source_file("CORREDOR 5.gpkg")
+LOCAL_CORRIDOR_MASK_GPKG = local_source_file("mascara corredor.gpkg")
+LOCAL_CORRIDOR_MASK_LAYER = "corredor"
 LOCAL_WATERWAYS_GPKG = local_source_file("Rios_filtrado_suavizado_optimizado.gpkg")
 LOCAL_WATERWAYS_LAYER = "Rios_filtrado_suavizado_optimizado"
 SLIVER_AREA_M2 = 1.0
@@ -470,6 +472,61 @@ def export_local_waterways(output_dir: Path) -> dict[str, Any]:
     }
 
 
+def export_local_corridor_mask(output_dir: Path) -> dict[str, Any]:
+    dataset = ogr.Open(str(LOCAL_CORRIDOR_MASK_GPKG), 0)
+    if dataset is None:
+        raise RuntimeError(f"No se pudo abrir {LOCAL_CORRIDOR_MASK_GPKG}")
+    layer = dataset.GetLayerByName(LOCAL_CORRIDOR_MASK_LAYER) or dataset.GetLayer(0)
+    if layer is None:
+        raise RuntimeError(f"No se encontro una capa util en {LOCAL_CORRIDOR_MASK_GPKG}")
+    layer_name = layer.GetName()
+
+    src_srs = traditional_srs(layer.GetSpatialRef())
+    dst_srs = wgs84_srs()
+    transform = None
+    if src_srs is not None and not src_srs.IsSame(dst_srs):
+        transform = osr.CoordinateTransformation(src_srs, dst_srs)
+
+    features = []
+    bounds: list[float] | None = None
+    skipped = 0
+    for feature in layer:
+        geom_ref = feature.GetGeometryRef()
+        if geom_ref is None or geom_ref.IsEmpty():
+            skipped += 1
+            continue
+        geom_json = geometry_to_json(geom_ref, transform, 0.00006)
+        if geom_json is None:
+            skipped += 1
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "properties": properties_for(feature),
+                "geometry": geom_json,
+            }
+        )
+        bounds = expand_bounds(bounds, geom_json)
+
+    collection = {"type": "FeatureCollection", "features": features}
+    output_path = output_dir / "corridor_mask.geojson"
+    output_path.write_text(
+        json.dumps(collection, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    dataset = None
+    return {
+        "name": "corridor_mask",
+        "path": str(output_path),
+        "source": str(LOCAL_CORRIDOR_MASK_GPKG),
+        "layer": layer_name,
+        "feature_count": len(features),
+        "bounds": bounds,
+        "source_epsg": source_epsg_code(src_srs),
+        "skipped_features": skipped,
+    }
+
+
 def geometry_to_json(
     geometry: ogr.Geometry,
     transform: osr.CoordinateTransformation | None,
@@ -603,6 +660,8 @@ def main() -> None:
     exports = [export_layer(args.source, args.output, spec) for spec in LAYER_SPECS]
     if LOCAL_WATERWAYS_GPKG.exists():
         exports.insert(1, export_local_waterways(args.output))
+    if LOCAL_CORRIDOR_MASK_GPKG.exists():
+        exports.insert(4, export_local_corridor_mask(args.output))
     community_export = next(item for item in exports if item["name"] == "communities")
     if community_export["feature_count"] < 25:
         raise RuntimeError(

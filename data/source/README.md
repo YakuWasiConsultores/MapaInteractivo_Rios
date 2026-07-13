@@ -8,6 +8,7 @@ Archivos esperados:
 - `CORREDOR_FINAL/CORREDOR_FINAL.shp`: comunidades finales, fuente
   prioritaria actual.
 - `CORREDOR 5.gpkg`: comunidades actualizadas.
+- `mascara corredor.gpkg`: mascara/contorno local del corredor.
 - `Rios_filtrado_1.gpkg`: capa intermedia de rios suavizados, no usada por el
   HTML.
 - `Rios_filtrado_suavizado_optimizado.gpkg`: fuente local prioritaria de la

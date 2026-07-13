@@ -18,6 +18,7 @@ def test_expected_files_exist():
         "docs/inset_ecuador.png",
         "docs/inset_napo.png",
         "data/processed/communities.geojson",
+        "data/processed/corridor_mask.geojson",
         "data/processed/waterways.geojson",
         "data/processed/waterway_labels.geojson",
         "data/processed/metadata.json",
@@ -63,6 +64,13 @@ def test_waterways_use_the_reviewed_local_hydrography():
     } == {"Rios filtrados y suavizados (capa local)"}
 
 
+def test_corridor_mask_uses_local_layer():
+    mask = load_json("data/processed/corridor_mask.geojson")
+    assert len(mask["features"]) == 1
+    assert mask["features"][0]["geometry"]["type"] in {"Polygon", "MultiPolygon"}
+    assert mask["features"][0]["properties"]["area"] > 100000
+
+
 def test_waterway_labels_overlay_previous_named_layer():
     labels = load_json("data/processed/waterway_labels.geojson")
     assert len(labels["features"]) == 78
@@ -86,6 +94,8 @@ def test_html_embeds_map_data():
     assert "RESERVA NARUPA" in html
     assert "Rios filtrados y suavizados" in html
     assert "waterwayLabels" in html
+    assert "corridorMask" in html
+    assert "Mascara corredor" in html
     assert "Nombres hidrograficos" in html
     assert "OpenStreetMap (capa anterior)" in html
     # Standard A0 poster format markers
