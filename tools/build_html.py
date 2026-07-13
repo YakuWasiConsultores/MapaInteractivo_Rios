@@ -117,7 +117,11 @@ TEMPLATE = r"""<!DOCTYPE html>
         :root {
             --water-river: #0e6db4;
             --water-stream: #4ba3d8;
+            --print-page-width: 1189mm;
+            --print-page-height: 841mm;
+            --print-scale: 1;
         }
+        @page { size: 1189mm 841mm; margin: 0; }
         body {
             margin: 0;
             padding: 20px;
@@ -137,17 +141,43 @@ TEMPLATE = r"""<!DOCTYPE html>
             border: 2px solid transparent;
         }
         @media print {
-            @page { size: A0 landscape; margin: 0; }
-            body { padding: 0; background: #fff; }
+            html, body {
+                width: var(--print-page-width);
+                height: var(--print-page-height);
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                background: #fff;
+            }
             .no-print { display: none !important; }
-            .page-container { border: none; padding: 25px; }
+            .page-container {
+                width: 1189mm;
+                height: 841mm;
+                border: none;
+                padding: 25px;
+                zoom: var(--print-scale);
+            }
+        }
+        .print-controls {
+            position: fixed; top: 20px; right: 20px;
+            display: flex; align-items: center; gap: 12px;
+            background: rgba(255,255,255,0.96); border: 2px solid #0e6db4;
+            padding: 10px 12px; border-radius: 10px;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.3); z-index: 9999;
+        }
+        .print-controls label { font-size: 1.25rem; font-weight: bold; color: #12344d; }
+        .print-controls select {
+            border: 2px solid #0e6db4; border-radius: 6px; background: #fff;
+            padding: 10px 12px; font-size: 1.2rem; font-weight: bold;
         }
         .btn-print {
-            position: fixed; top: 20px; right: 20px;
             background: #0e6db4; color: white; border: none;
-            padding: 15px 30px; font-size: 1.5rem; border-radius: 8px;
+            padding: 12px 22px; font-size: 1.25rem; border-radius: 8px;
             cursor: pointer; font-weight: bold;
-            box-shadow: 3px 3px 8px rgba(0,0,0,0.3); z-index: 9999;
+        }
+        .btn-print:hover { background: #084f83; }
+        .btn-print:focus-visible, .print-controls select:focus-visible {
+            outline: 4px solid #f4d35e; outline-offset: 3px;
         }
 
         /* Layout Grid */
@@ -215,11 +245,12 @@ TEMPLATE = r"""<!DOCTYPE html>
         .map-wrapper { flex: 4; min-height: 800px; position: relative; background: #fafafa; }
         #map { width: 100%; height: 100%; background: #fff; }
         .map-title-banner {
-            position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+            position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
             background: #fff; padding: 20px 40px; font-size: 2.6rem; font-weight: bold;
             text-align: center; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
             white-space: normal; width: 90%; border: 2px solid #000;
         }
+        @media print { .map-title-banner { top: 30px; } }
 
         .kba-pattern {
             background: repeating-linear-gradient(45deg, #e67e22, #e67e22 5px, transparent 5px, transparent 10px);
@@ -280,7 +311,17 @@ TEMPLATE += r"""<body>
         </pattern>
     </defs></svg>
 
-    <button class="btn-print no-print" onclick="window.print()">Imprimir PDF (A0)</button>
+    <div class="print-controls no-print" aria-label="Opciones de impresion">
+        <label for="paper-size">Formato</label>
+        <select id="paper-size" onchange="setPaperSize(this.value)">
+            <option value="A0" selected>A0 (1189 x 841 mm)</option>
+            <option value="A1">A1 (841 x 594 mm)</option>
+            <option value="A2">A2 (594 x 420 mm)</option>
+            <option value="A3">A3 (420 x 297 mm)</option>
+            <option value="A4">A4 (297 x 210 mm)</option>
+        </select>
+        <button class="btn-print" onclick="printPoster()">Imprimir / guardar PDF</button>
+    </div>
 
     <div class="page-container">
         <!-- COLUMNA IZQUIERDA -->
@@ -353,6 +394,46 @@ TEMPLATE += r"""
     <script src="assets/vendor/proj4.js"></script>
     <script>
         const DATA = __DATA_JSON__;
+
+        const PAPER_SIZES = {
+            A0: { width: 1189, height: 841 },
+            A1: { width: 841, height: 594 },
+            A2: { width: 594, height: 420 },
+            A3: { width: 420, height: 297 },
+            A4: { width: 297, height: 210 }
+        };
+        let selectedPaperSize = 'A0';
+
+        function setPaperSize(name) {
+            const paper = PAPER_SIZES[name] || PAPER_SIZES.A0;
+            selectedPaperSize = PAPER_SIZES[name] ? name : 'A0';
+            const scale = Math.min(paper.width / 1189, paper.height / 841);
+            document.documentElement.style.setProperty('--print-page-width', `${paper.width}mm`);
+            document.documentElement.style.setProperty('--print-page-height', `${paper.height}mm`);
+            document.documentElement.style.setProperty('--print-scale', scale.toFixed(6));
+
+            let pageStyle = document.getElementById('print-page-size');
+            if (!pageStyle) {
+                pageStyle = document.createElement('style');
+                pageStyle.id = 'print-page-size';
+                document.head.appendChild(pageStyle);
+            }
+            pageStyle.textContent = `@page { size: ${paper.width}mm ${paper.height}mm; margin: 0; }`;
+
+            const selector = document.getElementById('paper-size');
+            if (selector) selector.value = selectedPaperSize;
+        }
+
+        function printPoster() {
+            const originalTitle = document.title;
+            document.title = `Mapa_Rios_Yacu_Warmi_${selectedPaperSize}`;
+            window.addEventListener('afterprint', function restoreTitle() {
+                document.title = originalTitle;
+            }, { once: true });
+            window.print();
+        }
+
+        setPaperSize(new URLSearchParams(window.location.search).get('paper') || 'A0');
 
         // Normalize river names (fix mixed-case encoding like "RIo" / "Rio")
         function normName(n) {

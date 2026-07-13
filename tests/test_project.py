@@ -98,11 +98,15 @@ def test_html_embeds_map_data():
     assert "Mascara corredor" in html
     assert "Nombres hidrograficos" in html
     assert "OpenStreetMap (capa anterior)" in html
-    # Standard A0 poster format markers
+    # Standard poster format markers and print-size controls
     assert "page-container" in html
     assert "map-title-banner" in html
     assert "SIMBOLOGIA" in html
-    assert "size: A0 landscape" in html
+    assert "size: 1189mm 841mm" in html
+    assert "Imprimir / guardar PDF" in html
+    assert "A0 (1189 x 841 mm)" in html
+    assert "A4 (297 x 210 mm)" in html
+    assert "function setPaperSize(name)" in html
     # Must be a static poster: no interactive tile basemap, no panning
     assert "tileLayer" not in html
     assert "dragging: false" in html

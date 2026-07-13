@@ -86,9 +86,12 @@ El HTML generado queda en `docs/index.html`.
 
 ### Exportación PDF
 
-Abrir `docs/index.html` en Google Chrome y usar el botón **Imprimir PDF (A0)**,
-o imprimir con tamaño A0 horizontal y márgenes en cero. El diseño está preparado
-para `@page { size: A0 landscape }`.
+Abrir `docs/index.html` en Google Chrome, elegir A0, A1, A2, A3 o A4 en el
+selector **Formato** y usar **Imprimir / guardar PDF**. Cada opción genera una
+sola página horizontal con sus dimensiones físicas exactas y escala el póster
+completo de manera proporcional, sin recortarlo. En el diálogo de Chrome elegir
+**Guardar como PDF**, escala 100 %, márgenes **Ninguno** y activar **Gráficos de
+fondo**.
 
 ## Datos
 
