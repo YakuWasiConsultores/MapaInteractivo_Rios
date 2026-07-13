@@ -1,22 +1,22 @@
 {
-  "generated_at": "2026-07-13T15:28:28.217621+00:00",
+  "generated_at": "2026-07-13T19:47:45.648605+00:00",
   "source_root": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Corredor_de_conectividad_8",
   "exports": [
     {
       "name": "communities",
       "path": "data/processed/communities.geojson",
-      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/data/source/CORREDOR 5.gpkg",
-      "layer": "unin",
-      "feature_count": 27,
+      "source": "/media/arnold/RESP M2/Trabajos/Yacu Warmi/Mapas/Mapa interactivo/mapa interactivo/data/source/CORREDOR_FINAL/CORREDOR_FINAL.shp",
+      "layer": "CORREDOR_FINAL",
+      "feature_count": 26,
       "bounds": [
         -77.90081958808595,
         -0.88362711154818,
-        -77.14304216278778,
-        -0.346223059109352
+        -77.21945145731087,
+        -0.370263846987575
       ],
       "source_epsg": 32718,
-      "raw_feature_count": 28,
-      "skipped_slivers": 1
+      "raw_feature_count": 26,
+      "skipped_slivers": 0
     },
     {
       "name": "waterways",
@@ -160,8 +160,8 @@
   "map_bounds": [
     -77.90081958808595,
     -0.88362711154818,
-    -77.14304216278778,
-    -0.346223059109352
+    -77.21945145731087,
+    -0.370263846987575
   ],
   "utm_epsg": 32718,
   "utm_label": "ZONA 18 SUR"

@@ -26,15 +26,19 @@ def test_expected_files_exist():
         assert (ROOT / relative_path).exists(), relative_path
 
 
-def test_communities_keep_27_features_and_new_communities():
+def test_communities_use_corredor_final_snapshot():
     communities = load_json("data/processed/communities.geojson")
     names = {feature["properties"]["NAME FINAL"] for feature in communities["features"]}
     ids = {feature["properties"]["NUM_ID"] for feature in communities["features"]}
-    assert len(communities["features"]) == 27
-    assert ids == set(range(1, 28))
+    assert len(communities["features"]) == 26
+    assert ids == {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+        14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 26, 30, 31,
+    }
     assert "CENTRO URBANO HUATICOCHA" in names
-    assert "COMUNA JUMANDI" in names
-    assert "COMUNA KICHWA VERDE SUMACO" in names
+    assert "COMUNIDAD SAN JOSE DE PAYAMINO" in names
+    assert "RESERVA BIOLOGICA RÍO BIGAL" in names
+    assert "RESERVA NARUPA" in names
 
 
 def test_waterways_use_the_reviewed_local_hydrography():
@@ -79,7 +83,7 @@ def test_html_embeds_map_data():
     assert "const DATA =" in html
     assert "Quebradas" in html
     assert "CENTRO URBANO HUATICOCHA" in html
-    assert "COMUNA JUMANDI" in html
+    assert "RESERVA NARUPA" in html
     assert "Rios filtrados y suavizados" in html
     assert "waterwayLabels" in html
     assert "Nombres hidrograficos" in html

@@ -30,6 +30,29 @@ Para la simbologia del mapa, los ordenes 9--11 se clasifican como rios
 principales y los ordenes 5--8 como quebradas y esteros. La capa OSM ya no se
 usa por defecto y queda disponible solamente como respaldo manual.
 
+## Actualizacion CORREDOR_FINAL - 2026-07-13
+
+Se agrego `data/source/CORREDOR_FINAL/CORREDOR_FINAL.shp` como fuente
+prioritaria de comunidades. La capa esta en EPSG:32718, tiene 26 poligonos
+validos y usa `NAME FIN_3`, `ids_2_2` y `ha` como campos principales.
+`data/source/CORREDOR 5.gpkg` queda como respaldo local.
+
+Cambios principales frente al snapshot anterior:
+
+| Indicador | Valor |
+|---|---:|
+| Poligonos exportados | 26 |
+| Slivers descartados | 0 |
+| IDs presentes | 1-22, 24, 26, 30, 31 |
+| Nuevas reservas visibles | 2 |
+
+Nombres nuevos o relevantes:
+
+- `RESERVA BIOLOGICA RÍO BIGAL` (ID 30).
+- `RESERVA NARUPA` (ID 31).
+- `COMUNIDAD SAN JOSE DE PAYAMINO` se normalizo solo en capitalizacion desde
+  el valor fuente `COMUNIDAD SANa JOSE DE PAYAMINO`.
+
 ## Inventario de archivos
 
 | Tipo | Archivo/directorio | Observacion |

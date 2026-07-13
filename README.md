@@ -19,7 +19,7 @@ póster A0 horizontal imprimible a PDF.
 │   └── inset_napo.png     ← Mapa de ubicación (provincial)
 │
 ├── data/processed/        ← GeoJSON procesados (WGS84) usados por el mapa
-├── data/source/           ← GeoPackage crudos locales, ignorados por Git
+├── data/source/           ← Fuentes GIS crudas locales, ignoradas por Git
 ├── tools/                 ← Scripts de extracción y construcción
 ├── tests/                 ← Tests
 └── ANALISIS_DATOS.md      ← Inventario y diagnóstico de la base GIS
@@ -95,11 +95,11 @@ para `@page { size: A0 landscape }`.
 Los GeoJSON en `data/processed/` constituyen el snapshot procesado utilizado por
 la construcción del mapa.
 
-- **Comunidades:** si existe `data/source/CORREDOR 5.gpkg`, la
-  exportacion toma esa capa local como fuente prioritaria y limpia slivers
-  degenerados antes de generar `communities.geojson`. El snapshot actual queda
-  en 27 comunidades visibles, incluyendo `COMUNA JUMANDI` y
-  `COMUNA KICHWA VERDE SUMACO`.
+- **Comunidades:** si existe
+  `data/source/CORREDOR_FINAL/CORREDOR_FINAL.shp`, la exportacion toma esa
+  capa como fuente prioritaria. El snapshot actual queda en 26 polígonos
+  visibles con IDs reales de la capa, incluyendo `RESERVA BIOLOGICA RÍO BIGAL`
+  y `RESERVA NARUPA`. `data/source/CORREDOR 5.gpkg` queda como respaldo local.
 - **Hidrografía:** si existe
   `data/source/Rios_filtrado_suavizado_optimizado.gpkg`, se usa
   como fuente prioritaria. La capa tiene siete trazados jerarquizados (`ORDER`

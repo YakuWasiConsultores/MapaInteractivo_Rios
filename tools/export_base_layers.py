@@ -26,6 +26,7 @@ def local_source_file(filename: str) -> Path:
     return next((path for path in candidates if path.exists()), candidates[0])
 
 
+LOCAL_COMMUNITIES_FINAL_SHP = local_source_file("CORREDOR_FINAL/CORREDOR_FINAL.shp")
 LOCAL_COMMUNITIES_GPKG = local_source_file("CORREDOR 5.gpkg")
 LOCAL_WATERWAYS_GPKG = local_source_file("Rios_filtrado_suavizado_optimizado.gpkg")
 LOCAL_WATERWAYS_LAYER = "Rios_filtrado_suavizado_optimizado"
@@ -130,6 +131,16 @@ COMMUNITY_NAME_FIELDS = [
     "Nombre_2",
     "pre_nombre",
 ]
+COMMUNITY_ID_FIELDS = [
+    "ids_2_2",
+    "NUM_ID",
+    "ids",
+    "NUM_ID_2_2",
+    "NUM_ID_2",
+    "NUM_ID_3",
+    "NUM_ID_4",
+]
+COMMUNITY_AREA_FIELDS = ["ha", "Ha", "ha_1", "ha_1_2", "Ha_2", "area_HA", "Area"]
 
 
 def traditional_srs(srs: osr.SpatialReference | None) -> osr.SpatialReference | None:
@@ -209,6 +220,11 @@ def normalize_community_name(value: str) -> str:
     return ascii_value
 
 
+def display_community_name(value: str) -> str:
+    name = re.sub(r"\s+", " ", (value or "").strip())
+    return name.replace("SANa JOSE", "SAN JOSE")
+
+
 def load_existing_community_map(
     output_dir: Path,
 ) -> tuple[dict[str, int], dict[str, str]]:
@@ -242,8 +258,34 @@ def feature_community_name(feature: ogr.Feature, known_names: dict[str, str]) ->
         normalized = normalize_community_name(cleaned)
         if normalized in known_names:
             return known_names[normalized]
-        return cleaned
+        return display_community_name(cleaned)
     return None
+
+
+def feature_community_id(feature: ogr.Feature) -> int | None:
+    for field in COMMUNITY_ID_FIELDS:
+        try:
+            value = feature.GetField(field)
+        except KeyError:
+            continue
+        if value in (None, ""):
+            continue
+        return int(float(value))
+    return None
+
+
+def feature_community_area_ha(feature: ogr.Feature, fallback_geometry: ogr.Geometry) -> float:
+    for field in COMMUNITY_AREA_FIELDS:
+        try:
+            value = feature.GetField(field)
+        except KeyError:
+            continue
+        if value in (None, ""):
+            continue
+        numeric = float(value)
+        if numeric > 0:
+            return round(numeric, 2)
+    return round(fallback_geometry.GetArea() / 10000, 2)
 
 
 def source_epsg_code(srs: osr.SpatialReference | None) -> int | None:
@@ -258,13 +300,15 @@ def source_epsg_code(srs: osr.SpatialReference | None) -> int | None:
         return None
 
 
-def export_local_communities(output_dir: Path, simplify: float) -> dict[str, Any]:
-    dataset = ogr.Open(str(LOCAL_COMMUNITIES_GPKG), 0)
+def export_local_communities(
+    output_dir: Path, simplify: float, source_path: Path
+) -> dict[str, Any]:
+    dataset = ogr.Open(str(source_path), 0)
     if dataset is None:
-        raise RuntimeError(f"No se pudo abrir {LOCAL_COMMUNITIES_GPKG}")
+        raise RuntimeError(f"No se pudo abrir {source_path}")
     layer = dataset.GetLayer(0)
     if layer is None:
-        raise RuntimeError(f"No se encontro una capa util en {LOCAL_COMMUNITIES_GPKG}")
+        raise RuntimeError(f"No se encontro una capa util en {source_path}")
     layer_name = layer.GetName()
 
     src_srs = traditional_srs(layer.GetSpatialRef())
@@ -284,6 +328,7 @@ def export_local_communities(output_dir: Path, simplify: float) -> dict[str, Any
         name = feature_community_name(feature, existing_names)
         if not name:
             continue
+        source_id = feature_community_id(feature)
         geometry = feature.GetGeometryRef()
         if geometry is None:
             continue
@@ -299,23 +344,31 @@ def export_local_communities(output_dir: Path, simplify: float) -> dict[str, Any
         display_name = existing_names.get(normalized, name)
         entry = grouped.get(normalized)
         if entry is None:
-            grouped[normalized] = {"name": display_name, "geometry": merged}
+            grouped[normalized] = {
+                "name": display_name,
+                "geometry": merged,
+                "source_id": source_id,
+                "area_ha": feature_community_area_ha(feature, merged),
+            }
         else:
             unioned = entry["geometry"].Union(merged)
             polygonal = polygons_only(unioned) if unioned is not None else None
             entry["geometry"] = polygonal if polygonal is not None else merged
+            if entry.get("source_id") is None and source_id is not None:
+                entry["source_id"] = source_id
+            entry["area_ha"] = round(entry["geometry"].GetArea() / 10000, 2)
 
     features = []
     bounds: list[float] | None = None
     for normalized, entry in grouped.items():
-        display_id = existing_ids.get(normalized)
+        display_id = entry.get("source_id") or existing_ids.get(normalized)
         if display_id is None:
             display_id = next_display_id
             next_display_id += 1
         geom_json = geometry_to_json(entry["geometry"], transform, simplify)
         if geom_json is None:
             continue
-        area_ha = round(entry["geometry"].GetArea() / 10000, 2)
+        area_ha = round(float(entry.get("area_ha") or entry["geometry"].GetArea() / 10000), 2)
         props = {
             "NUM_ID": display_id,
             "NAME FINAL": entry["name"],
@@ -338,7 +391,7 @@ def export_local_communities(output_dir: Path, simplify: float) -> dict[str, Any
     return {
         "name": "communities",
         "path": str(output_path),
-        "source": str(LOCAL_COMMUNITIES_GPKG),
+        "source": str(source_path),
         "layer": layer_name,
         "feature_count": len(features),
         "bounds": bounds,
@@ -472,8 +525,14 @@ def expand_bounds(bounds: list[float] | None, geom_json: dict[str, Any]) -> list
 
 
 def export_layer(source_root: Path, output_dir: Path, spec: dict[str, Any]) -> dict[str, Any]:
+    if spec["name"] == "communities" and LOCAL_COMMUNITIES_FINAL_SHP.exists():
+        return export_local_communities(
+            output_dir, float(spec.get("simplify", 0)), LOCAL_COMMUNITIES_FINAL_SHP
+        )
     if spec["name"] == "communities" and LOCAL_COMMUNITIES_GPKG.exists():
-        return export_local_communities(output_dir, float(spec.get("simplify", 0)))
+        return export_local_communities(
+            output_dir, float(spec.get("simplify", 0)), LOCAL_COMMUNITIES_GPKG
+        )
 
     source = source_root / spec["source"]
     dataset = ogr.Open(str(source), 0)
